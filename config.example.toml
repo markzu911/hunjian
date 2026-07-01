@@ -74,24 +74,13 @@ twelvelabs_rerank_terms = false
 # twelvelabs_pegasus_model = "pegasus1.5"
 
 # 支持的提供商 (Supported providers):
-#   openai
-#   aihubmix   (OpenAI-compatible AI model gateway)
-#   aimlapi     (OpenAI-compatible multi-model AI API)
-#   moonshot    (月之暗面)
-#   azure
-#   qwen        (通义千问)
 #   deepseek
+#   openai
+#   claude
+#   moonshot    (Kimi / 月之暗面)
+#   qwen        (通义千问)
+#   glm         (智谱 GLM)
 #   gemini
-#   ollama
-#   g4f        (disabled by default; set enable_g4f=true only after accepting its risks)
-#   oneapi
-#   cloudflare
-#   minimax
-#   evolink    (OpenAI-compatible multi-model AI gateway)
-#   mimo       (Xiaomi MiMo)
-#   ernie       (文心一言)
-#   modelscope  (魔搭社区)
-#   litellm     (100+ providers via LiteLLM gateway)
 llm_provider = "openai"
 
 ########## Pollinations AI Settings
@@ -124,6 +113,11 @@ openai_base_url = ""
 # Check your available models at https://platform.openai.com/account/limits
 # 如果使用兼容供应商，请填写该平台要求的模型 ID。
 openai_model_name = "gpt-4o-mini"
+
+########## Claude API Key
+claude_api_key = ""
+claude_base_url = "https://api.anthropic.com/v1"
+claude_model_name = "claude-3-5-sonnet-latest"
 
 ########## AIHubMix API Key
 # AIHubMix is OpenAI-compatible and can use one API key to access multiple models.
@@ -230,6 +224,11 @@ mimo_tts_style_prompt = "请用自然、清晰、适合短视频旁白的语气�
 deepseek_api_key = ""
 deepseek_base_url = "https://api.deepseek.com"
 deepseek_model_name = "deepseek-chat"
+
+########## GLM API Key
+glm_api_key = ""
+glm_base_url = "https://open.bigmodel.cn/api/paas/v4"
+glm_model_name = "glm-4-flash"
 
 
 ########## ModelScope API Key

@@ -190,6 +190,14 @@ def _generate_response(prompt: str) -> str:
                 base_url = config.app.get("openai_base_url", "")
                 if not base_url:
                     base_url = "https://api.openai.com/v1"
+            elif llm_provider == "claude":
+                api_key = config.app.get("claude_api_key")
+                model_name = config.app.get("claude_model_name")
+                base_url = config.app.get("claude_base_url", "")
+                if not model_name:
+                    model_name = "claude-3-5-sonnet-latest"
+                if not base_url:
+                    base_url = "https://api.anthropic.com/v1"
             elif llm_provider == "aihubmix":
                 api_key = config.app.get("aihubmix_api_key")
                 model_name = config.app.get("aihubmix_model_name")
@@ -286,6 +294,14 @@ def _generate_response(prompt: str) -> str:
                 base_url = config.app.get("deepseek_base_url")
                 if not base_url:
                     base_url = "https://api.deepseek.com"
+            elif llm_provider == "glm":
+                api_key = config.app.get("glm_api_key")
+                model_name = config.app.get("glm_model_name")
+                base_url = config.app.get("glm_base_url")
+                if not model_name:
+                    model_name = "glm-4-flash"
+                if not base_url:
+                    base_url = "https://open.bigmodel.cn/api/paas/v4"
             elif llm_provider == "modelscope":
                 api_key = config.app.get("modelscope_api_key")
                 model_name = config.app.get("modelscope_model_name")
@@ -359,6 +375,36 @@ def _generate_response(prompt: str) -> str:
                     raise ValueError(
                         f"{llm_provider}: base_url is not set, please set it in the config.toml file."
                     )
+
+            if llm_provider == "claude":
+                response = requests.post(
+                    f"{base_url.rstrip('/')}/messages",
+                    headers={
+                        "x-api-key": api_key,
+                        "anthropic-version": "2023-06-01",
+                        "content-type": "application/json",
+                    },
+                    json={
+                        "model": model_name,
+                        "max_tokens": 2048,
+                        "messages": [{"role": "user", "content": prompt}],
+                    },
+                    timeout=(30, 120),
+                )
+                if response.status_code >= 400:
+                    raise Exception(
+                        f"[{llm_provider}] returned an error response: "
+                        f"{response.status_code} {response.text}"
+                    )
+
+                result = response.json()
+                content_parts = result.get("content", [])
+                text_parts = []
+                for part in content_parts:
+                    if isinstance(part, dict) and part.get("type") == "text":
+                        text_parts.append(part.get("text", ""))
+
+                return _normalize_text_response("".join(text_parts), llm_provider)
 
             if llm_provider == "qwen":
                 import dashscope
@@ -758,7 +804,7 @@ def generate_terms(
             "the order of topics in the video script."
         )
         ordering_rule = (
-            "6. keep the terms in the same order as the script narration; "
+            "8. keep the terms in the same order as the script narration; "
             "earlier terms must describe earlier visual moments."
         )
         # 有序关键词模式下，示例数量要和 amount 保持一致，避免模型被固定
@@ -795,6 +841,8 @@ def generate_terms(
 3. you must only return the json-array of strings. you must not return anything else. you must not return the script.
 4. the search terms must be related to the subject of the video.
 5. reply with english search terms only.
+6. first identify the concrete visible subject from the video subject, translate it to a simple English noun phrase if needed, and include that visible subject in every search term unless the script clearly requires a different object or scene.
+7. prefer concrete stock-footage visuals such as objects, actions, places, closeups, and scenes; avoid abstract moods or generic terms that could return unrelated footage.
 {ordering_rule}
 
 ## Output Example:
@@ -849,6 +897,111 @@ Please note that you must use English for generating video search terms; Chinese
 
     logger.success(f"completed: \n{search_terms}")
     return search_terms
+
+
+def _normalize_material_order(raw_order, material_count: int) -> list[int]:
+    if not isinstance(raw_order, list) or material_count <= 0:
+        return list(range(material_count))
+
+    parsed_order = []
+    for item in raw_order:
+        try:
+            parsed_order.append(int(item))
+        except (TypeError, ValueError):
+            continue
+
+    if parsed_order and 0 not in parsed_order and all(
+        1 <= item <= material_count for item in parsed_order
+    ):
+        parsed_order = [item - 1 for item in parsed_order]
+
+    normalized_order = []
+    seen = set()
+    for item in parsed_order:
+        if 0 <= item < material_count and item not in seen:
+            normalized_order.append(item)
+            seen.add(item)
+
+    normalized_order.extend(
+        index for index in range(material_count) if index not in seen
+    )
+    return normalized_order
+
+
+def generate_local_material_order(
+    video_subject: str,
+    video_script: str,
+    material_names: list[str],
+) -> list[int]:
+    material_count = len(material_names or [])
+    if material_count <= 1:
+        return list(range(material_count))
+
+    material_list = [
+        {"index": index, "name": name or f"material-{index}"}
+        for index, name in enumerate(material_names)
+    ]
+    prompt = f"""
+# Role: Local Video Material Timeline Sorter
+
+## Goal
+Sort local video/image materials so they follow the narration order of the script.
+
+## Rules
+1. Use the material file names as semantic hints for the visual content.
+2. Return a JSON array of zero-based integer indexes only.
+3. Include every material index exactly once.
+4. Put the material that best matches the earliest script moment first.
+5. If two materials seem equally suitable, keep their original relative order.
+6. Do not return explanations, markdown, or objects.
+
+## Output Example
+[0, 2, 1]
+
+## Context
+### Video Subject
+{video_subject}
+
+### Video Script
+{video_script}
+
+### Materials
+{json.dumps(material_list, ensure_ascii=False)}
+""".strip()
+
+    response = ""
+    for i in range(_max_retries):
+        try:
+            response = _generate_response(prompt)
+            if "Error: " in response:
+                logger.error(f"failed to sort local materials: {response}")
+                break
+
+            raw_order = json.loads(_strip_code_fence(response))
+            order = _normalize_material_order(raw_order, material_count)
+            logger.info(f"local material order: {order}")
+            return order
+        except Exception as e:
+            logger.warning(f"failed to sort local materials: {str(e)}")
+            if response:
+                match = re.search(r"\[.*]", response, re.DOTALL)
+                if match:
+                    try:
+                        raw_order = json.loads(match.group())
+                        order = _normalize_material_order(raw_order, material_count)
+                        logger.info(f"local material order: {order}")
+                        return order
+                    except Exception as parse_error:
+                        logger.warning(
+                            f"failed to parse local material order: {str(parse_error)}"
+                        )
+
+        if i < _max_retries:
+            logger.warning(
+                f"failed to sort local materials, trying again... {i + 1}"
+            )
+
+    return list(range(material_count))
 
 
 # =============================================================================

@@ -223,9 +223,47 @@ def generate_subtitle(task_id, params, video_script, sub_maker, audio_file):
     return subtitle_path
 
 
-def get_video_materials(task_id, params, video_terms, audio_duration):
+def _local_material_display_name(material_url: str) -> str:
+    filename = path.basename(str(material_url or ""))
+    prefix, separator, original_name = filename.partition("_")
+    if separator and original_name and len(prefix) >= 8:
+        return original_name
+    return filename
+
+
+def reorder_local_materials_by_script(params, video_script: str):
+    materials = list(params.video_materials or [])
+    if len(materials) <= 1:
+        return materials
+
+    material_names = [
+        _local_material_display_name(material.url) for material in materials
+    ]
+    order = llm.generate_local_material_order(
+        video_subject=params.video_subject,
+        video_script=video_script,
+        material_names=material_names,
+    )
+    logger.info(
+        "local materials reordered by script: "
+        f"{[(index, material_names[index]) for index in order]}"
+    )
+    return [materials[index] for index in order]
+
+
+def get_video_materials(task_id, params, video_terms, audio_duration, video_script=""):
     if params.video_source == "local":
         logger.info("\n\n## preprocess local materials")
+        if params.match_materials_to_script:
+            logger.info(
+                "match_materials_to_script is enabled for local materials; "
+                "local material order will be inferred from the script and file names."
+            )
+            params.video_materials = reorder_local_materials_by_script(
+                params=params,
+                video_script=video_script,
+            )
+            params.video_concat_mode = VideoConcatMode.sequential
         materials = video.preprocess_video(
             materials=params.video_materials, clip_duration=params.video_clip_duration
         )
@@ -392,7 +430,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
 
     # 5. Get video materials
     downloaded_videos = get_video_materials(
-        task_id, params, video_terms, audio_duration
+        task_id, params, video_terms, audio_duration, video_script
     )
     if not downloaded_videos:
         sm.state.update_task(task_id, state=const.TASK_STATE_FAILED)
