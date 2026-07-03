@@ -1,4 +1,4 @@
-import math
+﻿import math
 import os.path
 import re
 from os import path
@@ -17,12 +17,24 @@ def generate_script(task_id, params):
     logger.info("\n\n## generating video script")
     video_script = params.video_script.strip()
     if not video_script:
+        # 计算目标时长：如果用户上传了本地素材，根据素材数量和每段时长计算
+        target_duration = 0
+        if params.video_source == "local" and params.video_materials:
+            material_count = len(params.video_materials)
+            clip_duration = params.video_clip_duration or 5
+            target_duration = material_count * clip_duration
+            logger.info(
+                f"calculated target script duration from local materials: "
+                f"{material_count} materials × {clip_duration}s = {target_duration}s"
+            )
+
         video_script = llm.generate_script(
             video_subject=params.video_subject,
             language=params.video_language,
             paragraph_number=params.paragraph_number,
             video_script_prompt=params.video_script_prompt,
             custom_system_prompt=params.custom_system_prompt,
+            target_duration=target_duration,
         )
     else:
         logger.debug(f"video script: \n{video_script}")
@@ -264,9 +276,23 @@ def get_video_materials(task_id, params, video_terms, audio_duration, video_scri
                 video_script=video_script,
             )
             params.video_concat_mode = VideoConcatMode.sequential
+
+        # 记录预处理前的素材数量
+        original_material_count = len(params.video_materials)
+
         materials = video.preprocess_video(
             materials=params.video_materials, clip_duration=params.video_clip_duration
         )
+
+        # 如果有素材被过滤掉，记录日志
+        if materials and len(materials) < original_material_count:
+            filtered_count = original_material_count - len(materials)
+            logger.info(
+                f"filtered out {filtered_count} material(s) that did not meet requirements "
+                f"(resolution < 480x480 or duration < {params.video_clip_duration}s), "
+                f"remaining: {len(materials)}"
+            )
+
         if not materials:
             sm.state.update_task(task_id, state=const.TASK_STATE_FAILED)
             logger.error(
@@ -359,7 +385,16 @@ def generate_final_videos(
 
 def start(task_id, params: VideoParams, stop_at: str = "video"):
     logger.info(f"start task: {task_id}, stop_at: {stop_at}")
-    sm.state.update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=5)
+
+    # 保存任务的基本信息和创建时间
+    import time
+    sm.state.update_task(
+        task_id,
+        state=const.TASK_STATE_PROCESSING,
+        progress=5,
+        video_subject=params.video_subject,
+        create_time=int(time.time()),
+    )
 
     # 1. Generate script
     video_script = generate_script(task_id, params)

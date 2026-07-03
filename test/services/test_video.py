@@ -500,6 +500,56 @@ class TestVideoService(unittest.TestCase):
         self.assertEqual(result, combined_video_path)
         self.assertEqual(write_mock.call_count, 4)
 
+    def test_combine_videos_splits_long_clips_in_sequential_mode(self):
+        """
+        顺序拼接模式下，“每段视频时间” 也应该对长视频持续生效。
+        一条 12.5 秒素材在 max_clip_duration=3 时，应该被切成多个片段，
+        而不是只保留第一段 0-3 秒。
+        """
+
+        class _FakeAudioClip:
+            duration = 12.5
+
+            def close(self):
+                pass
+
+        class _FakeVideoClip:
+            def __init__(self, duration):
+                self.duration = duration
+                self.size = (1080, 1920)
+                self.w = 1080
+                self.h = 1920
+
+            def subclipped(self, start_time, end_time):
+                return _FakeVideoClip(end_time - start_time)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            combined_video_path = os.path.join(temp_dir, "combined.mp4")
+
+            with patch.object(vd, "AudioFileClip", return_value=_FakeAudioClip()):
+                with patch.object(
+                    vd,
+                    "_open_video_clip_quietly",
+                    return_value=_FakeVideoClip(12.5),
+                ):
+                    with patch.object(
+                        vd, "_write_videofile_with_codec_fallback"
+                    ) as write_mock:
+                        with patch.object(vd, "concat_video_clips_with_ffmpeg"):
+                            with patch.object(vd, "delete_files"):
+                                result = vd.combine_videos(
+                                    combined_video_path=combined_video_path,
+                                    video_paths=["long-source.mp4"],
+                                    audio_file=os.path.join(temp_dir, "audio.mp3"),
+                                    video_aspect=vd.VideoAspect.portrait,
+                                    video_concat_mode=vd.VideoConcatMode.sequential,
+                                    video_transition_mode=None,
+                                    max_clip_duration=3,
+                                )
+
+        self.assertEqual(result, combined_video_path)
+        self.assertEqual(write_mock.call_count, 5)
+
     def test_prioritize_unique_source_clips_uses_each_source_before_reuse(self):
         """
         随机模式下，一个长素材会被拆成多个片段。调度层应先让每个源素材

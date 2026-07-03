@@ -542,6 +542,20 @@ def combine_videos(
     max_clip_duration: int = 5,
     threads: int = 2,
 ) -> str:
+    try:
+        max_clip_duration = int(max_clip_duration)
+    except (TypeError, ValueError):
+        logger.warning(
+            f"invalid max_clip_duration: {max_clip_duration}, fallback to 5 seconds"
+        )
+        max_clip_duration = 5
+
+    if max_clip_duration < 1:
+        logger.warning(
+            f"max_clip_duration must be >= 1, got {max_clip_duration}, fallback to 1 second"
+        )
+        max_clip_duration = 1
+
     audio_clip = AudioFileClip(audio_file)
     try:
         # 这里只需要读取旁白音频时长来决定素材视频拼接长度；后续不会再使用
@@ -594,8 +608,9 @@ def combine_videos(
                 )
 
             start_time = end_time
-            if video_concat_mode.value == VideoConcatMode.sequential.value:
-                break
+            # 无论随机还是顺序拼接，"每段视频时间" 都应该持续生效。
+            # 旧逻辑在 sequential 模式下切出第一段后立即 break，导致长视频
+            # 后续片段永远不会参与合成，看起来像时长设置没有生效。
 
     subclipped_items = _prioritize_unique_source_clips(
         subclipped_items=subclipped_items,
@@ -1135,7 +1150,7 @@ def generate_video(
     del video_clip
 
 
-def preprocess_video(materials: List[MaterialInfo], clip_duration=4):
+def preprocess_video(materials: List[MaterialInfo], clip_duration=3):
     # WebUI 在某些二次生成场景下可能传入空素材列表，这里直接返回空结果，避免抛出 NoneType 异常。
     if not materials:
         return []
@@ -1195,7 +1210,7 @@ def preprocess_video(materials: List[MaterialInfo], clip_duration=4):
                 logger.info(f"processing image: {material_source_path}")
                 # 探测尺寸时已经打开过一次素材，这里先释放探测句柄，再重新创建用于导出的图片 clip。
                 close_clip(clip)
-                # Create an image clip and set its duration to 3 seconds
+                # Create an image clip and set its duration to the selected clip duration.
                 clip = (
                     ImageClip(material_source_path)
                     .with_duration(clip_duration)
@@ -1204,7 +1219,7 @@ def preprocess_video(materials: List[MaterialInfo], clip_duration=4):
                 # Apply a zoom effect using the resize method.
                 # A lambda function is used to make the zoom effect dynamic over time.
                 # The zoom effect starts from the original size and gradually scales up to 120%.
-                # t represents the current time, and clip.duration is the total duration of the clip (3 seconds).
+                # t represents the current time, and clip.duration is the total duration of the clip.
                 # Note: 1 represents 100% size, so 1.2 represents 120% size.
                 zoom_clip = clip.resized(
                     lambda t: 1 + (clip_duration * 0.03) * (t / clip.duration)
@@ -1222,6 +1237,16 @@ def preprocess_video(materials: List[MaterialInfo], clip_duration=4):
                 material.url = video_file
                 logger.success(f"image processed: {video_file}")
             else:
+                # 视频素材：检查时长是否满足最小片段要求
+                clip_duration_actual = clip.duration
+                if clip_duration_actual < clip_duration:
+                    logger.warning(
+                        f"video too short: {material_source_path}, "
+                        f"duration {clip_duration_actual:.2f}s < required {clip_duration}s, skipping"
+                    )
+                    close_clip(clip)
+                    continue
+
                 # 普通视频素材只需要读取尺寸做校验，校验完成后立即释放句柄即可。
                 close_clip(clip)
                 # Update url to the resolved absolute path so that downstream

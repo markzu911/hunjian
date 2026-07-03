@@ -1,4 +1,4 @@
-import json
+﻿import json
 import logging
 import re
 import requests
@@ -672,6 +672,7 @@ def build_script_prompt(
     paragraph_number: int = 1,
     video_script_prompt: str = "",
     custom_system_prompt: str = "",
+    target_duration: float = 0,
 ) -> str:
     paragraph_number = _normalize_script_paragraph_number(paragraph_number)
     video_script_prompt = _limit_script_text(
@@ -681,9 +682,20 @@ def build_script_prompt(
         custom_system_prompt, MAX_SCRIPT_SYSTEM_PROMPT_LENGTH, "custom_system_prompt"
     )
 
-    # 将“脚本生成规则”和“运行时上下文”分开拼接。这样高级用户即使覆盖默认
+    # 将"脚本生成规则"和"运行时上下文"分开拼接。这样高级用户即使覆盖默认
     # system prompt，也不会漏掉视频主题、语言、段落数这些每次生成都必须带上的参数。
     prompt = custom_system_prompt or DEFAULT_SCRIPT_SYSTEM_PROMPT
+
+    # 如果有目标时长约束，添加额外的时长要求
+    if target_duration > 0:
+        prompt += f"""
+
+## Duration Constraint:
+The script MUST be suitable for a video of approximately {target_duration:.1f} seconds duration.
+Please generate content that can be naturally narrated within this time frame.
+For reference: typical narration speed is about 150-180 words per minute for English, or 4-5 Chinese characters per second.
+"""
+
     prompt += f"""
 
 # Initialization:
@@ -692,6 +704,8 @@ def build_script_prompt(
 """.rstrip()
     if language:
         prompt += f"\n- language: {language}"
+    if target_duration > 0:
+        prompt += f"\n- target duration: {target_duration:.1f} seconds"
     if video_script_prompt:
         prompt += f"""
 
@@ -708,6 +722,7 @@ def generate_script(
     paragraph_number: int = 1,
     video_script_prompt: str = "",
     custom_system_prompt: str = "",
+    target_duration: float = 0,
 ) -> str:
     paragraph_number = _normalize_script_paragraph_number(paragraph_number)
     video_script_prompt = _limit_script_text(
@@ -722,11 +737,13 @@ def generate_script(
         paragraph_number=paragraph_number,
         video_script_prompt=video_script_prompt,
         custom_system_prompt=custom_system_prompt,
+        target_duration=target_duration,
     )
     final_script = ""
     logger.info(
         "generating video script: "
         f"subject={video_subject}, paragraph_number={paragraph_number}, "
+        f"target_duration={target_duration:.1f}s, "
         f"has_custom_prompt={bool(video_script_prompt.strip())}, "
         f"has_custom_system_prompt={bool(custom_system_prompt.strip())}"
     )

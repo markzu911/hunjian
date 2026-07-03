@@ -1,7 +1,8 @@
-import os
+﻿import os
 import re
 import sys
 import webbrowser
+import hashlib
 from datetime import datetime
 from html import escape
 from uuid import UUID, uuid4
@@ -33,9 +34,9 @@ from app.utils import utils
 
 st.set_page_config(
     page_title="混剪智能体",
-    page_icon="🤖",
+    page_icon="🎬",
     layout="wide",
-    initial_sidebar_state="auto",
+    initial_sidebar_state="collapsed",
     menu_items={
         "Report a bug": "https://github.com/harry0703/MoneyPrinterTurbo/issues",
         "About": "# 混剪智能体\nSimply provide a topic or keyword for a video, and it will "
@@ -48,331 +49,625 @@ st.set_page_config(
 
 streamlit_style = """
 <style>
+    /* ============================================================
+       MoneyPrinterTurbo Design System — Cyberpunk Edition
+       富有科技感的深色主题，霓虹色彩，动态效果
+       ============================================================ */
+
+    /* ----- Design Tokens ----- */
     :root {
-        --mpt-bg: #f7f8f4;
-        --mpt-bg-warm: #fbfaf5;
-        --mpt-surface: #ffffff;
-        --mpt-surface-soft: #fbfcf8;
-        --mpt-surface-strong: #f3f7f3;
-        --mpt-ink: #17212b;
-        --mpt-muted: #607086;
-        --mpt-soft-muted: #8794a5;
-        --mpt-border: #dbe5de;
-        --mpt-border-strong: #bdcec5;
-        --mpt-teal: #0f766e;
-        --mpt-teal-dark: #115e59;
-        --mpt-teal-soft: #e5f5f2;
-        --mpt-amber: #b7791f;
-        --mpt-indigo: #315f88;
-        --mpt-focus: rgba(15, 118, 110, 0.24);
-        --mpt-shadow-sm: 0 8px 18px rgba(23, 33, 43, 0.06);
-        --mpt-shadow: 0 18px 42px rgba(23, 33, 43, 0.10);
-        --mpt-shadow-lg: 0 28px 70px rgba(23, 33, 43, 0.16);
+        /* Surface - 深色科技感 */
+        --mpt-bg: #0a0e17;
+        --mpt-bg-warm: #0d1219;
+        --mpt-surface: #111827;
+        --mpt-surface-soft: #1a1f2e;
+        --mpt-surface-raised: rgba(26, 31, 46, 0.95);
+        --mpt-surface-glass: rgba(17, 24, 39, 0.8);
+
+        /* Ink - 高对比度文字 */
+        --mpt-ink: #f0f4ff;
+        --mpt-ink-soft: #d1d9e8;
+        --mpt-muted: #8b95ab;
+        --mpt-soft-muted: #6b7489;
+        --mpt-placeholder: #4a5468;
+
+        /* Border - 霓虹边框 */
+        --mpt-border: #1e2937;
+        --mpt-border-strong: #2d3748;
+        --mpt-border-hover: #3d4a5f;
+
+        /* Brand — 霓虹青色 + 紫色渐变 */
+        --mpt-cyan: #00f5ff;
+        --mpt-cyan-dark: #00d4dd;
+        --mpt-cyan-light: #5ffbff;
+        --mpt-cyan-glow: rgba(0, 245, 255, 0.4);
+        --mpt-purple: #a855f7;
+        --mpt-purple-dark: #9333ea;
+        --mpt-purple-glow: rgba(168, 85, 247, 0.4);
+        --mpt-pink: #ec4899;
+        --mpt-pink-glow: rgba(236, 72, 153, 0.4);
+
+        /* Semantic - 霓虹语义色 */
+        --mpt-success: #10b981;
+        --mpt-success-glow: rgba(16, 185, 129, 0.4);
+        --mpt-warning: #f59e0b;
+        --mpt-warning-glow: rgba(245, 158, 11, 0.4);
+        --mpt-error: #ef4444;
+        --mpt-error-glow: rgba(239, 68, 68, 0.4);
+
+        /* Shadows — 霓虹发光效果 */
+        --mpt-shadow-xs: 0 0 10px rgba(0, 245, 255, 0.1);
+        --mpt-shadow-sm: 0 0 15px rgba(0, 245, 255, 0.15),
+                         0 0 5px rgba(168, 85, 247, 0.1);
+        --mpt-shadow: 0 0 25px rgba(0, 245, 255, 0.2),
+                      0 0 10px rgba(168, 85, 247, 0.15);
+        --mpt-shadow-md: 0 0 40px rgba(0, 245, 255, 0.3),
+                         0 0 20px rgba(168, 85, 247, 0.2);
+        --mpt-shadow-lg: 0 0 60px rgba(0, 245, 255, 0.4),
+                         0 0 30px rgba(168, 85, 247, 0.3);
+        --mpt-shadow-glow: 0 0 2px var(--mpt-cyan),
+                           0 0 20px var(--mpt-cyan-glow),
+                           0 0 40px var(--mpt-purple-glow);
+
+        /* Radius */
+        --mpt-radius-xs: 6px;
+        --mpt-radius-sm: 10px;
+        --mpt-radius: 14px;
+        --mpt-radius-lg: 18px;
+        --mpt-radius-xl: 24px;
+
+        /* Typography */
+        --mpt-font: "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB",
+                    "Noto Sans SC", "Source Han Sans CN", system-ui,
+                    -apple-system, "Segoe UI", sans-serif;
+        --mpt-font-mono: "Cascadia Code", "Fira Code", "JetBrains Mono",
+                        "SF Mono", "Consolas", monospace;
+
+        /* Motion */
+        --mpt-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+        --mpt-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+        --mpt-duration-fast: 140ms;
+        --mpt-duration: 200ms;
+        --mpt-duration-slow: 300ms;
+        --mpt-page-gutter: clamp(40px, 4vw, 64px);
+        --mpt-content-max: 1680px;
+        --mpt-sticky-width: min(var(--mpt-content-max), calc(100vw - (var(--mpt-page-gutter) * 2)));
+        --mpt-fixed-edge: max(var(--mpt-page-gutter), calc((100vw - var(--mpt-content-max)) / 2));
+        --mpt-status-gap: 12px;
+        --mpt-sticky-top: 10px;
+        --mpt-material-card-top: 88px;
+        --mpt-settings-space: 108px;
     }
 
+    /* ----- Animated Background Grid ----- */
+    @keyframes gridPulse {
+        0%, 100% { opacity: 0.05; }
+        50% { opacity: 0.15; }
+    }
+
+    @keyframes neonPulse {
+        0%, 100% { opacity: 0.6; }
+        50% { opacity: 1; }
+    }
+
+    /* ----- Base Resets ----- */
     html, body, [data-testid="stAppViewContainer"] {
         background:
-            linear-gradient(90deg, rgba(15, 118, 110, 0.035) 1px, transparent 1px),
-            linear-gradient(180deg, rgba(49, 95, 136, 0.035) 1px, transparent 1px),
-            linear-gradient(180deg, var(--mpt-bg-warm) 0%, var(--mpt-bg) 42%, #f2f4ef 100%);
-        background-size: 44px 44px, 44px 44px, auto;
+            radial-gradient(1400px 520px at 5% -20%, var(--mpt-cyan-glow), transparent 64%),
+            radial-gradient(1100px 480px at 97% -24%, var(--mpt-purple-glow), transparent 64%),
+            radial-gradient(960px 380px at 50% 118%, var(--mpt-pink-glow), transparent 72%),
+            linear-gradient(rgba(0, 245, 255, 0.08) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(0, 245, 255, 0.08) 1px, transparent 1px),
+            linear-gradient(178deg, var(--mpt-bg-warm) 0%, var(--mpt-bg) 100%);
+        background-size:
+            auto,
+            auto,
+            auto,
+            24px 24px,
+            24px 24px,
+            auto;
         color: var(--mpt-ink);
+        font-family: var(--mpt-font);
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        font-feature-settings: "cv02", "cv03", "cv04", "cv11";
     }
 
-    [data-testid="stHeader"] {
-        display: none !important;
-    }
-
+    /* ----- Chrome Removal ----- */
+    [data-testid="stHeader"] { display: none !important; }
     [data-testid="stToolbar"],
     [data-testid="stDecoration"],
     [data-testid="stStatusWidget"],
+    [data-testid="stSidebar"],
+    [data-testid="collapsedControl"],
     .stDeployButton,
     #MainMenu,
-    footer {
-        display: none !important;
-    }
+    footer { display: none !important; }
 
+    /* ----- Layout Container ----- */
     .block-container {
-        max-width: 1440px;
-        padding-top: 0.65rem;
+        box-sizing: border-box;
+        width: 100%;
+        max-width: var(--mpt-content-max);
+        padding-top: 1rem;
+        padding-left: var(--mpt-page-gutter);
+        padding-right: var(--mpt-page-gutter);
         padding-bottom: 4rem;
     }
 
-    h1, h2, h3 {
-        letter-spacing: 0;
+    /* ----- Typography ----- */
+    h1, h2, h3, h4 {
+        letter-spacing: -0.01em;
         color: var(--mpt-ink);
+        font-weight: 700;
     }
-
     h1 {
         padding-top: 0 !important;
         margin-bottom: 0 !important;
-        font-size: 2rem !important;
-        line-height: 1.1 !important;
+        font-size: 1.95rem !important;
+        line-height: 1.15 !important;
+        font-weight: 700 !important;
+    }
+    h2 { font-size: 1.35rem !important; }
+    h3 { font-size: 1.1rem !important; font-weight: 650 !important; }
+
+    p, label, span, div { letter-spacing: 0; }
+
+    ::selection {
+        background: var(--mpt-teal-ghost);
+        color: var(--mpt-teal-dark);
     }
 
-    p, label, span, div {
-        letter-spacing: 0;
+    /* ----- Custom Scrollbar ----- */
+    ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+        background: var(--mpt-border-strong);
+        border-radius: 999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+        background: var(--mpt-muted);
     }
 
+    /* ----- Sticky Header Shell ----- */
     .mpt-sticky-shell {
-        min-height: 10.9rem;
-        margin-bottom: 1.15rem;
+        min-height: 11.4rem;
+        margin-bottom: 1rem;
     }
-
     .mpt-sticky-summary {
         position: fixed;
-        top: 0;
+        top: var(--mpt-sticky-top);
         left: 50%;
-        width: min(1440px, calc(100% - 10rem));
+        width: var(--mpt-sticky-width);
         transform: translateX(-50%);
         z-index: 50;
         margin: 0;
-        padding: 0.35rem 0 1rem;
+        padding: 0.5rem 0 1rem;
         background: linear-gradient(
             180deg,
-            rgba(251, 250, 245, 0.98) 0%,
-            rgba(251, 250, 245, 0.94) 82%,
-            rgba(251, 250, 245, 0) 100%
+            rgba(10, 14, 23, 0.97) 0%,
+            rgba(13, 18, 25, 0.92) 76%,
+            rgba(10, 14, 23, 0) 100%
         );
-        backdrop-filter: blur(16px);
+        backdrop-filter: blur(20px) saturate(1.08);
+        -webkit-backdrop-filter: blur(20px) saturate(1.08);
     }
 
+    /* ----- Topbar / Brand ----- */
     .mpt-topbar {
         display: flex;
         align-items: center;
         gap: 14px;
         min-height: 52px;
         margin-bottom: 0.75rem;
+        padding-right: calc(var(--mpt-settings-space) + 12px);
     }
-
+    .mpt-topbar-brand {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+    .mpt-topbar-actions {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        margin-left: auto;
+        flex: 0 0 auto;
+        max-width: calc(100% - var(--mpt-settings-space) - 12px);
+    }
     .mpt-mark {
         width: 44px;
         height: 44px;
         display: grid;
         place-items: center;
-        border-radius: 8px;
-        background: linear-gradient(135deg, var(--mpt-teal), var(--mpt-indigo));
-        color: #ffffff;
-        font-weight: 800;
-        box-shadow: 0 14px 30px rgba(15, 118, 110, 0.24);
+        border-radius: var(--mpt-radius);
+        background: linear-gradient(135deg, var(--mpt-cyan) 0%, var(--mpt-purple) 100%);
+        color: #0a0e17;
+        font-weight: 700;
+        font-size: 1.1rem;
+        letter-spacing: 0.5px;
+        box-shadow:
+            var(--mpt-shadow-glow),
+            inset 0 1px 0 rgba(255, 255, 255, 0.3);
         flex: 0 0 auto;
+        transition: box-shadow var(--mpt-duration) var(--mpt-ease-out),
+                    transform var(--mpt-duration-fast) var(--mpt-ease-out);
+        animation: neonPulse 3s ease-in-out infinite;
     }
-
+    .mpt-mark:hover {
+        box-shadow:
+            0 0 40px var(--mpt-cyan-glow),
+            0 0 60px var(--mpt-purple-glow),
+            inset 0 1px 0 rgba(255, 255, 255, 0.4);
+        transform: translateY(-2px) scale(1.05);
+        animation: none;
+    }
     .mpt-title {
-        font-size: 2.05rem;
-        line-height: 1.12;
-        font-weight: 800;
+        font-size: 1.9rem;
+        line-height: 1.15;
+        font-weight: 720;
         color: var(--mpt-ink);
+        letter-spacing: -0.015em;
     }
-
     .mpt-version {
-        color: var(--mpt-muted);
-        font-weight: 600;
-        font-size: 0.92rem;
-        margin-top: 2px;
+        color: var(--mpt-soft-muted);
+        font-weight: 500;
+        font-size: 0.8rem;
+        margin-top: 3px;
+        font-variant-numeric: tabular-nums;
     }
 
+    /* ----- Status Grid (4 cards) ----- */
     .mpt-status-grid {
         display: grid;
         grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 12px;
-        margin: 0.25rem 0 1.1rem;
+        gap: var(--mpt-status-gap);
+        margin: 0.2rem 0 1rem;
+    }
+    .mpt-sticky-summary .mpt-status-grid { margin-bottom: 0; }
+
+    .mpt-status-card {
+        position: relative;
+        min-height: 78px;
+        border: 1px solid var(--mpt-border);
+        border-radius: var(--mpt-radius);
+        background: var(--mpt-surface-glass);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        box-shadow: var(--mpt-shadow-xs);
+        padding: 14px 16px 14px 40px;
+        overflow: hidden;
+        transition: border-color var(--mpt-duration) var(--mpt-ease-out),
+                    box-shadow var(--mpt-duration) var(--mpt-ease-out),
+                    transform var(--mpt-duration-fast) var(--mpt-ease-out),
+                    background var(--mpt-duration) var(--mpt-ease-out);
+    }
+    .mpt-status-card:hover {
+        border-color: var(--mpt-cyan);
+        box-shadow: var(--mpt-shadow-glow);
+        background: var(--mpt-surface-raised);
+        transform: translateY(-2px);
+    }
+    .mpt-status-card::before {
+        content: "";
+        position: absolute;
+        top: 18px;
+        left: 16px;
+        width: 7px;
+        height: 7px;
+        border-radius: 999px;
+        background: var(--mpt-teal);
+        box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.12);
+        transition: box-shadow var(--mpt-duration) var(--mpt-ease-out);
+    }
+    .mpt-status-card:hover::before {
+        box-shadow: 0 0 0 6px rgba(15, 118, 110, 0.18);
+    }
+    .mpt-status-label {
+        color: var(--mpt-muted);
+        font-size: 0.73rem;
+        font-weight: 550;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+        margin: 0 0 5px 0;
+    }
+    .mpt-status-value {
+        color: var(--mpt-ink);
+        font-size: 0.98rem;
+        font-weight: 650;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 
-    .mpt-sticky-summary .mpt-status-grid {
-        margin-bottom: 0;
-    }
-
+    /* ----- Settings Popover (top-right gear) ----- */
     [data-testid="stElementContainer"]:has(#mpt-settings-popover-marker) {
         position: fixed;
-        top: 0.4rem;
-        right: max(1.5rem, calc((100% - 1440px) / 2 + 1rem));
+        top: calc(var(--mpt-sticky-top) + 0.25rem);
+        right: var(--mpt-fixed-edge);
         z-index: 90;
         width: auto !important;
     }
-
     [data-testid="stElementContainer"]:has(#mpt-settings-popover-marker) [data-testid="stMarkdownContainer"] {
         display: none;
     }
-
     [data-testid="stElementContainer"]:has(#mpt-settings-popover-marker) + div {
         position: fixed;
-        top: 0.4rem;
-        right: max(1.5rem, calc((100% - 1440px) / 2 + 1rem));
+        top: calc(var(--mpt-sticky-top) + 0.25rem);
+        right: var(--mpt-fixed-edge);
         z-index: 91;
         width: auto !important;
     }
-
     [data-testid="stElementContainer"]:has(#mpt-settings-popover-marker) + div button {
-        min-height: 40px;
-        border-radius: 8px;
-        border-color: var(--mpt-border);
-        background: rgba(255, 255, 255, 0.92);
+        min-height: 42px;
+        border-radius: var(--mpt-radius);
+        border: 1px solid var(--mpt-border);
+        background: var(--mpt-surface-glass);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
         box-shadow: var(--mpt-shadow-sm);
-        font-weight: 760;
+        font-weight: 600;
+        color: var(--mpt-ink);
+        transition: all var(--mpt-duration-fast) var(--mpt-ease-out);
+    }
+    [data-testid="stElementContainer"]:has(#mpt-settings-popover-marker) + div button:hover {
+        border-color: var(--mpt-teal);
+        box-shadow: var(--mpt-shadow);
+    }
+
+    /* ----- Material Library Popover (top status slot) ----- */
+    [data-testid="stElementContainer"]:has(#mpt-material-library-popover-marker) {
+        position: fixed;
+        top: var(--mpt-material-card-top);
+        right: var(--mpt-fixed-edge);
+        z-index: 88;
+        width: calc((var(--mpt-sticky-width) - (var(--mpt-status-gap) * 3)) / 4) !important;
+    }
+
+    [data-testid="stElementContainer"]:has(#mpt-material-library-popover-marker) [data-testid="stMarkdownContainer"] {
+        display: none;
+    }
+
+    [data-testid="stElementContainer"]:has(#mpt-material-library-popover-marker) + div {
+        position: fixed;
+        top: var(--mpt-material-card-top);
+        right: var(--mpt-fixed-edge);
+        z-index: 89;
+        width: calc((var(--mpt-sticky-width) - (var(--mpt-status-gap) * 3)) / 4) !important;
+    }
+
+    [data-testid="stElementContainer"]:has(#mpt-material-library-popover-marker) + div button {
+        position: relative;
+        width: 100%;
+        min-height: 79px;
+        justify-content: flex-start;
+        align-items: flex-start;
+        padding: 14px 16px 14px 40px;
+        overflow: hidden;
+        text-align: left;
+        border: 1px solid rgba(33, 212, 196, 0.20);
+        border-radius: var(--mpt-radius);
+        color: var(--mpt-ink);
+        background:
+            linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(242, 251, 253, 0.88));
+        box-shadow:
+            0 0 0 1px rgba(255, 255, 255, 0.70) inset,
+            0 8px 24px rgba(10, 21, 36, 0.06);
+        transition:
+            border-color var(--mpt-duration) var(--mpt-ease-out),
+            box-shadow var(--mpt-duration) var(--mpt-ease-out),
+            transform var(--mpt-duration-fast) var(--mpt-ease-out);
+    }
+
+    [data-testid="stElementContainer"]:has(#mpt-material-library-popover-marker) + div button::before {
+        content: "";
+        position: absolute;
+        top: 18px;
+        left: 16px;
+        width: 7px;
+        height: 7px;
+        border-radius: 999px;
+        background: var(--mpt-electric);
+        box-shadow:
+            0 0 0 4px rgba(56, 189, 248, 0.14),
+            0 0 18px rgba(56, 189, 248, 0.44);
+    }
+
+    [data-testid="stElementContainer"]:has(#mpt-material-library-popover-marker) + div button::after {
+        content: "素材整理维护";
+        position: absolute;
+        left: 40px;
+        right: 16px;
+        top: 38px;
+        color: var(--mpt-ink);
+        font-size: 0.98rem;
+        font-family: var(--mpt-font);
+        font-weight: 800;
+        letter-spacing: 0;
+        line-height: 1.2;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    [data-testid="stElementContainer"]:has(#mpt-material-library-popover-marker) + div button:hover {
+        border-color: rgba(33, 212, 196, 0.68);
+        box-shadow:
+            0 0 0 1px rgba(33, 212, 196, 0.18) inset,
+            0 8px 22px rgba(37, 99, 235, 0.10),
+            0 0 22px rgba(33, 212, 196, 0.14);
+        transform: translateY(-1px);
+    }
+
+    [data-testid="stElementContainer"]:has(#mpt-material-library-popover-marker) + div button p {
+        position: absolute;
+        left: 40px;
+        right: 34px;
+        top: 14px;
+        margin: 0 !important;
+        color: var(--mpt-muted);
+        font-size: 0.73rem;
+        font-family: var(--mpt-font-mono);
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        line-height: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    [data-testid="stElementContainer"]:has(#mpt-material-library-popover-marker) + div button svg,
+    [data-testid="stElementContainer"]:has(#mpt-material-library-popover-marker) + div button [data-testid="stIconMaterial"] {
+        position: absolute;
+        top: 14px;
+        right: 14px;
+        flex: 0 0 auto;
     }
 
     [data-testid="stPopoverBody"] {
-        width: min(920px, calc(100vw - 32px)) !important;
-        max-width: min(920px, calc(100vw - 32px)) !important;
-        min-width: min(760px, calc(100vw - 32px)) !important;
-        max-height: calc(100vh - 128px);
+        width: min(940px, calc(100vw - 36px)) !important;
+        max-width: min(940px, calc(100vw - 36px)) !important;
+        min-width: min(760px, calc(100vw - 36px)) !important;
+        max-height: calc(100vh - 140px);
         overflow-y: auto;
-        padding: 1.15rem 1.25rem 1.3rem;
+        padding: 1.25rem 1.4rem 1.4rem;
         border: 1px solid var(--mpt-border);
-        border-radius: 8px;
+        border-radius: var(--mpt-radius-xl);
         box-shadow: var(--mpt-shadow-lg);
+        background: #ffffff;
     }
 
+    [data-testid="stPopoverBody"]:has(#mpt-material-library-body-marker) {
+        width: min(900px, calc(100vw - 36px)) !important;
+        max-width: min(900px, calc(100vw - 36px)) !important;
+        min-width: min(760px, calc(100vw - 36px)) !important;
+        height: min(760px, calc(100vh - 48px)) !important;
+        max-height: min(760px, calc(100vh - 48px)) !important;
+        overflow-y: auto !important;
+        overscroll-behavior: contain;
+        scrollbar-gutter: stable;
+    }
     [data-testid="stPopoverBody"] h3 {
-        font-size: 1.12rem;
-        line-height: 1.25;
-        margin: 0.25rem 0 0.65rem;
+        font-size: 1.05rem;
+        line-height: 1.3;
+        font-weight: 650;
+        color: var(--mpt-ink);
+        margin: 0.1rem 0 0.65rem;
     }
-
     [data-testid="stPopoverBody"] [data-testid="stTabs"] button {
         min-height: 40px;
-        font-weight: 720;
+        font-weight: 600;
+        border-radius: var(--mpt-radius-sm) var(--mpt-radius-sm) 0 0;
     }
 
-    [data-testid="stPopoverBody"] [data-testid="stCodeBlock"] {
-        border-radius: 8px;
-        overflow: hidden;
-    }
-
+    /* ----- Wizard Progress ----- */
     .mpt-wizard {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 12px;
         margin: 0 0 1.1rem;
     }
-
     .mpt-wizard-step {
         position: relative;
-        min-height: 64px;
-        border: 1px solid var(--mpt-border);
-        border-radius: 8px;
-        background: rgba(255, 255, 255, 0.78);
-        padding: 12px 14px 12px 54px;
-        box-shadow: var(--mpt-shadow-sm);
+        min-height: 70px;
+        border: 1.5px solid var(--mpt-border);
+        border-radius: var(--mpt-radius);
+        background: var(--mpt-surface-glass);
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
+        padding: 14px 16px 14px 58px;
+        box-shadow: var(--mpt-shadow-xs);
         overflow: hidden;
-        transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+        transition: border-color var(--mpt-duration) var(--mpt-ease-out),
+                    box-shadow var(--mpt-duration) var(--mpt-ease-out),
+                    background var(--mpt-duration) var(--mpt-ease-out),
+                    transform var(--mpt-duration-fast) var(--mpt-ease-out);
     }
-
     .mpt-wizard-step::before {
         content: attr(data-step);
         position: absolute;
-        left: 14px;
+        left: 16px;
         top: 50%;
-        width: 28px;
-        height: 28px;
+        width: 32px;
+        height: 32px;
         display: grid;
         place-items: center;
         transform: translateY(-50%);
         border-radius: 999px;
-        border: 1px solid var(--mpt-border);
+        border: 1.5px solid var(--mpt-border);
         background: var(--mpt-surface);
         color: var(--mpt-muted);
-        font-size: 0.78rem;
-        font-weight: 800;
+        font-size: 0.84rem;
+        font-weight: 650;
+        font-variant-numeric: tabular-nums;
+        transition: all var(--mpt-duration) var(--mpt-ease-out);
     }
-
     .mpt-wizard-step.done {
         border-color: rgba(15, 118, 110, 0.28);
-        background: rgba(245, 251, 248, 0.9);
+        background: rgba(217, 240, 237, 0.38);
     }
-
     .mpt-wizard-step.done::before {
         content: "✓";
-        border-color: rgba(15, 118, 110, 0.35);
+        border-color: rgba(15, 118, 110, 0.30);
         background: var(--mpt-teal-soft);
         color: var(--mpt-teal-dark);
+        font-size: 0.95rem;
+        font-weight: 700;
     }
-
     .mpt-wizard-step.active {
-        border-color: rgba(15, 118, 110, 0.64);
-        background: linear-gradient(180deg, rgba(240, 253, 250, 0.98), rgba(255, 255, 255, 0.94));
-        box-shadow: 0 18px 36px rgba(15, 118, 110, 0.14);
+        border-color: var(--mpt-teal);
+        background: #ffffff;
+        box-shadow: var(--mpt-shadow-glow);
+        transform: translateY(-1px);
     }
-
     .mpt-wizard-step.active::before {
         border-color: transparent;
         background: linear-gradient(135deg, var(--mpt-teal), var(--mpt-indigo));
         color: #ffffff;
-        box-shadow: 0 8px 18px rgba(15, 118, 110, 0.24);
+        box-shadow: 0 5px 14px rgba(15, 118, 110, 0.32);
     }
-
     .mpt-wizard-index {
         color: var(--mpt-soft-muted);
-        font-size: 0.76rem;
-        font-weight: 760;
-        margin-bottom: 4px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+        margin-bottom: 3px;
     }
-
     .mpt-wizard-title {
         color: var(--mpt-ink);
-        font-size: 0.95rem;
-        font-weight: 780;
+        font-size: 0.94rem;
+        font-weight: 650;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
     }
 
-    .mpt-status-card {
-        position: relative;
-        min-height: 76px;
-        border: 1px solid var(--mpt-border);
-        border-radius: 8px;
-        background: rgba(255, 255, 255, 0.84);
-        box-shadow: var(--mpt-shadow-sm);
-        padding: 14px 16px;
-        overflow: hidden;
-    }
-
-    .mpt-status-card::before {
-        content: "";
-        position: absolute;
-        inset: 0 auto 0 0;
-        width: 3px;
-        background: linear-gradient(180deg, var(--mpt-teal), var(--mpt-amber));
-        opacity: 0.72;
-    }
-
-    .mpt-status-label {
-        color: var(--mpt-muted);
-        font-size: 0.78rem;
-        font-weight: 760;
-        margin-bottom: 7px;
-    }
-
-    .mpt-status-value {
-        color: var(--mpt-ink);
-        font-size: 1rem;
-        font-weight: 800;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
+    /* ----- Section Title ----- */
     .mpt-section-title {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 10px;
         color: var(--mpt-ink);
-        font-size: 1.02rem;
-        font-weight: 760;
+        font-size: 1.05rem;
+        font-weight: 650;
+        letter-spacing: -0.005em;
         margin: 0 0 0.85rem;
     }
-
     .mpt-section-title::before {
         content: "";
-        width: 8px;
-        height: 24px;
-        border-radius: 8px;
-        background: linear-gradient(180deg, var(--mpt-teal), var(--mpt-amber));
+        width: 4px;
+        height: 20px;
+        border-radius: 4px;
+        background: linear-gradient(180deg, var(--mpt-teal) 0%, var(--mpt-indigo) 100%);
         flex: 0 0 auto;
     }
 
+    /* ----- Generating Overlay ----- */
     .mpt-generating-overlay {
         position: fixed;
         inset: 0;
@@ -380,284 +675,907 @@ streamlit_style = """
         display: grid;
         place-items: center;
         padding: 1rem;
-        background: rgba(249, 250, 246, 0.78);
-        backdrop-filter: blur(12px);
+        background: rgba(245, 247, 243, 0.74);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
     }
-
     .mpt-generating-dialog {
-        width: min(420px, calc(100vw - 32px));
+        width: min(440px, calc(100vw - 36px));
         border: 1px solid var(--mpt-border);
-        border-radius: 8px;
-        background: rgba(255, 255, 255, 0.96);
-        box-shadow: 0 28px 70px rgba(31, 41, 51, 0.20);
-        padding: 28px 28px 26px;
+        border-radius: var(--mpt-radius-xl);
+        background: #ffffff;
+        box-shadow: var(--mpt-shadow-lg);
+        padding: 34px 32px 28px;
         text-align: center;
     }
-
     .mpt-generating-spinner {
-        width: 58px;
-        height: 58px;
-        margin: 0 auto 18px;
-        border: 4px solid #dce6e1;
+        width: 56px;
+        height: 56px;
+        margin: 0 auto 20px;
+        border: 3px solid rgba(15, 118, 110, 0.12);
         border-top-color: var(--mpt-teal);
-        border-right-color: var(--mpt-amber);
+        border-right-color: var(--mpt-indigo);
         border-radius: 999px;
-        animation: mpt-spin 900ms linear infinite;
+        animation: mpt-spin 800ms linear infinite;
     }
-
     .mpt-generating-title {
         color: var(--mpt-ink);
-        font-size: 1.08rem;
-        line-height: 1.35;
-        font-weight: 780;
+        font-size: 1.1rem;
+        line-height: 1.4;
+        font-weight: 680;
         margin-bottom: 8px;
+        letter-spacing: -0.005em;
     }
-
     .mpt-generating-copy {
         color: var(--mpt-muted);
-        font-size: 0.92rem;
-        line-height: 1.55;
-        margin-bottom: 18px;
+        font-size: 0.9rem;
+        line-height: 1.65;
+        margin-bottom: 22px;
     }
-
     .mpt-generating-progress {
         position: relative;
-        height: 6px;
+        height: 5px;
         overflow: hidden;
         border-radius: 999px;
-        background: #e5ebe8;
+        background: rgba(15, 118, 110, 0.09);
     }
-
     .mpt-generating-progress::before {
         content: "";
         position: absolute;
         top: 0;
         bottom: 0;
         left: 0;
-        width: 42%;
+        width: 38%;
         border-radius: inherit;
-        background: linear-gradient(90deg, var(--mpt-teal), var(--mpt-amber));
-        animation: mpt-progress 1.25s ease-in-out infinite;
+        background: linear-gradient(90deg, var(--mpt-teal), var(--mpt-indigo), var(--mpt-teal-light));
+        animation: mpt-progress 1.5s var(--mpt-ease-in-out) infinite;
     }
-
     @keyframes mpt-spin {
-        to {
-            transform: rotate(360deg);
-        }
+        to { transform: rotate(360deg); }
     }
-
     @keyframes mpt-progress {
-        0% {
-            transform: translateX(-110%);
-        }
-        100% {
-            transform: translateX(260%);
-        }
+        0%   { transform: translateX(-110%); }
+        100% { transform: translateX(270%); }
     }
 
+    /* ----- Container / Card Borders ----- */
     [data-testid="stVerticalBlockBorderWrapper"] {
         border: 1px solid var(--mpt-border);
-        border-radius: 8px;
-        background: rgba(255, 255, 255, 0.9);
+        border-radius: var(--mpt-radius-lg);
+        background: #ffffff;
+        box-shadow: var(--mpt-shadow-sm);
+        padding: 1.3rem 1.3rem 1.4rem;
+        transition: border-color var(--mpt-duration) var(--mpt-ease-out),
+                    box-shadow var(--mpt-duration) var(--mpt-ease-out);
+    }
+    [data-testid="stVerticalBlockBorderWrapper"]:hover {
+        border-color: var(--mpt-border-hover);
         box-shadow: var(--mpt-shadow);
-        padding: 1.15rem 1.15rem 1.25rem;
-        transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
     }
-
     [data-testid="stVerticalBlockBorderWrapper"]:focus-within {
-        border-color: rgba(15, 118, 110, 0.42);
-        box-shadow: 0 20px 42px rgba(15, 118, 110, 0.12);
+        border-color: rgba(15, 118, 110, 0.38);
+        box-shadow:
+            0 0 0 3px var(--mpt-teal-glow),
+            var(--mpt-shadow);
     }
-
     [data-testid="stVerticalBlockBorderWrapper"] [data-testid="stMarkdownContainer"] > p:first-child {
         color: var(--mpt-ink);
-        font-size: 1.04rem;
-        font-weight: 800;
-        margin-bottom: 0.75rem;
+        font-size: 1.02rem;
+        font-weight: 650;
+        letter-spacing: -0.005em;
+        margin-bottom: 0.8rem;
+        padding-bottom: 0.6rem;
+        border-bottom: 1px solid var(--mpt-border);
     }
 
+    /* ----- Expander ----- */
     div[data-testid="stExpander"] {
         border: 1px solid var(--mpt-border);
-        border-radius: 8px;
-        background: rgba(255, 255, 255, 0.78);
-        box-shadow: var(--mpt-shadow-sm);
+        border-radius: var(--mpt-radius);
+        background: var(--mpt-surface-glass);
+        box-shadow: none;
+        transition: border-color var(--mpt-duration-fast) var(--mpt-ease-out),
+                    background var(--mpt-duration-fast) var(--mpt-ease-out),
+                    box-shadow var(--mpt-duration-fast) var(--mpt-ease-out);
     }
-
+    div[data-testid="stExpander"]:hover {
+        border-color: var(--mpt-border-hover);
+        background: #ffffff;
+        box-shadow: var(--mpt-shadow-xs);
+    }
     div[data-testid="stExpander"] summary {
         min-height: 46px;
         color: var(--mpt-ink);
-        font-weight: 720;
+        font-weight: 600;
+        font-size: 0.94rem;
+        border-radius: var(--mpt-radius);
     }
 
+    /* ----- Input Fields ----- */
     [data-testid="stTextInput"] input,
     [data-testid="stTextArea"] textarea,
     [data-baseweb="select"] > div,
     [data-testid="stFileUploader"] section {
-        border-color: var(--mpt-border) !important;
-        border-radius: 8px !important;
+        border: 1px solid var(--mpt-border) !important;
+        border-radius: var(--mpt-radius-sm) !important;
+        background-color: var(--mpt-surface) !important;
+        color: var(--mpt-ink) !important;
+        font-family: var(--mpt-font) !important;
+        transition: border-color var(--mpt-duration-fast) var(--mpt-ease-out),
+                    box-shadow var(--mpt-duration-fast) var(--mpt-ease-out),
+                    background var(--mpt-duration-fast) var(--mpt-ease-out) !important;
+    }
+    [data-testid="stTextInput"] input,
+    [data-baseweb="select"] > div {
+        min-height: 46px;
+    }
+    [data-testid="stTextInput"] input::placeholder,
+    [data-testid="stTextArea"] textarea::placeholder {
+        color: var(--mpt-placeholder);
+    }
+    [data-testid="stTextInput"] input:hover,
+    [data-testid="stTextArea"] textarea:hover,
+    [data-baseweb="select"] > div:hover {
+        border-color: var(--mpt-border-hover) !important;
         background-color: var(--mpt-surface-soft) !important;
+    }
+    [data-testid="stFileUploader"] section {
+        border-style: dashed !important;
+        border-width: 2px !important;
+        border-color: var(--mpt-cyan) !important;
+        background: var(--mpt-surface-glass) !important;
+        border-radius: var(--mpt-radius) !important;
+        transition: border-color var(--mpt-duration) var(--mpt-ease-out),
+                    background var(--mpt-duration) var(--mpt-ease-out),
+                    box-shadow var(--mpt-duration) var(--mpt-ease-out) !important;
+    }
+    [data-testid="stFileUploader"] section:hover {
+        border-color: var(--mpt-cyan-light) !important;
+        background: var(--mpt-surface-raised) !important;
+        box-shadow: var(--mpt-shadow-sm) !important;
+    }
+    [data-testid="stTextInput"] input:focus,
+    [data-testid="stTextArea"] textarea:focus,
+    [data-baseweb="select"] > div:focus-within {
+        border-color: var(--mpt-cyan) !important;
+        box-shadow: 0 0 0 3px var(--mpt-cyan-glow) !important;
+        outline: none !important;
+    }
+    [data-testid="stTextArea"] textarea {
+        line-height: 1.65;
+        font-size: 0.94rem;
+    }
+
+    /* ----- Buttons ----- */
+    .stButton > button {
+        min-height: 46px;
+        border-radius: var(--mpt-radius-sm);
+        border: 1px solid var(--mpt-border);
+        background: #ffffff;
+        color: var(--mpt-ink);
+        font-weight: 620;
+        font-size: 0.94rem;
+        font-family: var(--mpt-font);
+        letter-spacing: -0.005em;
+        cursor: pointer;
+        transition: border-color var(--mpt-duration-fast) var(--mpt-ease-out),
+                    box-shadow var(--mpt-duration-fast) var(--mpt-ease-out),
+                    background var(--mpt-duration-fast) var(--mpt-ease-out),
+                    color var(--mpt-duration-fast) var(--mpt-ease-out),
+                    transform var(--mpt-duration-fast) var(--mpt-ease-out);
+        touch-action: manipulation;
+    }
+    .stButton > button:hover {
+        border-color: var(--mpt-teal);
+        color: var(--mpt-teal-dark);
+        background: rgba(217, 240, 237, 0.3);
+        box-shadow: var(--mpt-shadow-sm);
+    }
+    .stButton > button:active {
+        background: rgba(217, 240, 237, 0.5);
+        box-shadow: var(--mpt-shadow-xs);
+        transform: scale(0.975);
+    }
+    .stButton > button:focus-visible {
+        outline: none;
+        box-shadow:
+            0 0 0 3px var(--mpt-teal-glow),
+            var(--mpt-shadow-sm);
+    }
+    .stButton > button:disabled,
+    .stButton > button[disabled] {
+        opacity: 0.5;
+        cursor: not-allowed;
+        color: var(--mpt-soft-muted);
+        transform: none;
+    }
+    /* Primary Button */
+    .stButton > button[kind="primary"] {
+        background: linear-gradient(135deg, var(--mpt-cyan) 0%, var(--mpt-purple) 100%);
+        border: 1px solid var(--mpt-cyan);
+        color: #0a0e17;
+        font-weight: 650;
+        box-shadow:
+            var(--mpt-shadow-glow),
+            inset 0 1px 0 rgba(255, 255, 255, 0.3);
+        transition: border-color var(--mpt-duration-fast) var(--mpt-ease-out),
+                    box-shadow var(--mpt-duration-fast) var(--mpt-ease-out),
+                    background var(--mpt-duration-fast) var(--mpt-ease-out),
+                    color var(--mpt-duration-fast) var(--mpt-ease-out),
+                    transform var(--mpt-duration-fast) var(--mpt-ease-out);
+    }
+    .stButton > button[kind="primary"]:hover {
+        color: #0a0e17;
+        background: linear-gradient(135deg, var(--mpt-cyan-light) 0%, var(--mpt-purple-dark) 100%);
+        border-color: var(--mpt-cyan-light);
+        box-shadow:
+            0 0 50px var(--mpt-cyan-glow),
+            0 0 70px var(--mpt-purple-glow),
+            inset 0 1px 0 rgba(255, 255, 255, 0.4);
+        transform: translateY(-2px);
+    }
+    .stButton > button[kind="primary"]:active {
+        box-shadow:
+            0 0 30px var(--mpt-cyan-glow),
+            inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        transform: scale(0.98);
+    }
+
+    /* ----- Checkbox ----- */
+    [data-testid="stCheckbox"] label {
+        min-height: 34px;
+        color: var(--mpt-ink-soft);
+        font-size: 0.94rem;
+    }
+    [data-testid="stCheckbox"] [role="checkbox"]:focus-visible {
+        box-shadow: 0 0 0 3px var(--mpt-teal-glow);
+    }
+
+    /* ----- Slider ----- */
+    [data-testid="stSlider"] [role="slider"] {
+        box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.14);
+        border: 2px solid #ffffff;
+    }
+    [data-testid="stSlider"] [role="slider"]:focus-visible {
+        box-shadow: 0 0 0 5px var(--mpt-teal-glow);
+    }
+
+    /* ----- Video Player ----- */
+    [data-testid="stVideo"] {
+        overflow: hidden;
+        border: 1px solid var(--mpt-border);
+        border-radius: var(--mpt-radius);
+        background: #0b1220;
+        box-shadow: var(--mpt-shadow);
+        transition: box-shadow var(--mpt-duration) var(--mpt-ease-out);
+    }
+    [data-testid="stVideo"]:hover {
+        box-shadow: var(--mpt-shadow-md);
+    }
+
+    /* ----- Alert / Callout ----- */
+    [data-testid="stAlert"] {
+        border-radius: var(--mpt-radius);
+        border: 1px solid var(--mpt-border);
+        box-shadow: var(--mpt-shadow-xs);
+    }
+
+    /* ----- Tabs ----- */
+    [data-testid="stTabs"] {
+        border-bottom: 1px solid var(--mpt-border);
+    }
+    [data-testid="stTabs"] button {
+        min-height: 42px;
+        font-weight: 620;
+        font-family: var(--mpt-font);
+        color: var(--mpt-muted);
+        border-radius: var(--mpt-radius-sm) var(--mpt-radius-sm) 0 0 !important;
+        transition: color var(--mpt-duration-fast) var(--mpt-ease-out),
+                    border-color var(--mpt-duration-fast) var(--mpt-ease-out),
+                    background var(--mpt-duration-fast) var(--mpt-ease-out);
+    }
+    [data-testid="stTabs"] button:hover {
+        color: var(--mpt-ink);
+        background: rgba(15, 118, 110, 0.04);
+    }
+    [data-testid="stTabs"] button[aria-selected="true"] {
+        color: var(--mpt-teal-dark);
+        border-bottom-color: var(--mpt-teal) !important;
+    }
+
+    /* ----- Metrics ----- */
+    [data-testid="stMetric"] {
+        background: #ffffff;
+        border: 1px solid var(--mpt-border);
+        border-radius: var(--mpt-radius);
+        padding: 13px 16px;
+        box-shadow: var(--mpt-shadow-xs);
+        transition: box-shadow var(--mpt-duration) var(--mpt-ease-out),
+                    border-color var(--mpt-duration) var(--mpt-ease-out);
+    }
+    [data-testid="stMetric"]:hover {
+        box-shadow: var(--mpt-shadow-sm);
+        border-color: var(--mpt-border-hover);
+    }
+    [data-testid="stMetric"] [data-testid="stMetricLabel"] {
+        color: var(--mpt-muted);
+        font-size: 0.75rem;
+        font-weight: 550;
+    }
+    [data-testid="stMetric"] [data-testid="stMetricValue"] {
+        color: var(--mpt-ink);
+        font-weight: 650;
+        font-variant-numeric: tabular-nums;
+    }
+
+    /* ----- DataFrames / Tables ----- */
+    [data-testid="stDataFrame"],
+    [data-testid="stDataEditor"] {
+        border: 1px solid var(--mpt-border);
+        border-radius: var(--mpt-radius);
+        overflow: hidden;
+        box-shadow: var(--mpt-shadow-xs);
+    }
+
+    /* ----- Code Blocks ----- */
+    [data-testid="stCodeBlock"] {
+        border-radius: var(--mpt-radius-sm);
+        font-family: var(--mpt-font-mono);
+    }
+
+    /* ----- Select Dropdown ----- */
+    [data-baseweb="popover"]:has([data-baseweb="menu"]),
+    [data-baseweb="popover"]:has([role="listbox"]) {
+        border-radius: var(--mpt-radius) !important;
+        box-shadow: var(--mpt-shadow-lg) !important;
+        border: 1px solid var(--mpt-border) !important;
+        overflow: hidden;
+    }
+    [data-baseweb="menu"] li {
+        min-height: 40px;
+        font-family: var(--mpt-font);
+    }
+
+    /* ----- Caption / Help Text ----- */
+    .stCaption, [data-testid="stCaptionContainer"] {
+        color: var(--mpt-muted);
+        font-size: 0.82rem;
+        line-height: 1.5;
+    }
+
+    /* ============================================================
+       Tech Interface Pass
+       ============================================================ */
+    :root {
+        --mpt-bg: #eef5f7;
+        --mpt-bg-warm: #f7fbfc;
+        --mpt-surface: #ffffff;
+        --mpt-surface-soft: #f6fbfc;
+        --mpt-surface-raised: rgba(255, 255, 255, 0.96);
+        --mpt-surface-glass: rgba(255, 255, 255, 0.82);
+        --mpt-ink: #0a1524;
+        --mpt-ink-soft: #1e3148;
+        --mpt-muted: #52677f;
+        --mpt-soft-muted: #7b8da2;
+        --mpt-border: rgba(130, 158, 177, 0.34);
+        --mpt-border-strong: rgba(45, 134, 157, 0.38);
+        --mpt-border-hover: rgba(20, 184, 166, 0.52);
+        --mpt-teal: #089d91;
+        --mpt-teal-dark: #04756d;
+        --mpt-teal-light: #21d4c4;
+        --mpt-teal-soft: #ddfbf7;
+        --mpt-teal-ghost: rgba(8, 157, 145, 0.08);
+        --mpt-teal-glow: rgba(33, 212, 196, 0.22);
+        --mpt-indigo: #2563eb;
+        --mpt-indigo-dark: #1d4ed8;
+        --mpt-indigo-soft: rgba(37, 99, 235, 0.08);
+        --mpt-electric: #38bdf8;
+        --mpt-electric-glow: rgba(56, 189, 248, 0.24);
+        --mpt-amber: #f59e0b;
+        --mpt-shadow-xs: 0 1px 2px rgba(10, 21, 36, 0.05);
+        --mpt-shadow-sm: 0 4px 14px rgba(10, 21, 36, 0.07);
+        --mpt-shadow: 0 12px 32px rgba(10, 21, 36, 0.09);
+        --mpt-shadow-md: 0 18px 44px rgba(10, 21, 36, 0.12);
+        --mpt-shadow-lg: 0 26px 68px rgba(10, 21, 36, 0.16);
+        --mpt-shadow-glow: 0 0 0 1px rgba(33, 212, 196, 0.26),
+                           0 16px 42px rgba(37, 99, 235, 0.16);
+    }
+
+    html, body, [data-testid="stAppViewContainer"] {
+        background:
+            linear-gradient(90deg, rgba(8, 157, 145, 0.055) 1px, transparent 1px),
+            linear-gradient(180deg, rgba(37, 99, 235, 0.045) 1px, transparent 1px),
+            linear-gradient(135deg, rgba(56, 189, 248, 0.08) 0%, transparent 32%),
+            linear-gradient(180deg, #f8fcfd 0%, #eef5f7 48%, #e7f0f4 100%);
+        background-size: 36px 36px, 36px 36px, auto, auto;
+    }
+
+    .mpt-sticky-summary {
+        border-bottom: 1px solid rgba(33, 212, 196, 0.22);
+        background:
+            linear-gradient(90deg, rgba(8, 157, 145, 0.10), transparent 24%, rgba(37, 99, 235, 0.08)),
+            linear-gradient(180deg, rgba(248, 252, 253, 0.96), rgba(248, 252, 253, 0.86) 76%, rgba(248, 252, 253, 0));
+    }
+
+    .mpt-sticky-summary::after {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0.78rem;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(33, 212, 196, 0.58), rgba(37, 99, 235, 0.38), transparent);
+        pointer-events: none;
+    }
+
+    .mpt-mark {
+        position: relative;
+        background:
+            linear-gradient(135deg, rgba(33, 212, 196, 0.96), rgba(37, 99, 235, 0.95));
+        box-shadow:
+            0 0 0 1px rgba(255, 255, 255, 0.26) inset,
+            0 12px 30px rgba(37, 99, 235, 0.22),
+            0 0 24px rgba(33, 212, 196, 0.30);
+    }
+
+    .mpt-mark::after {
+        content: "";
+        position: absolute;
+        inset: 5px;
+        border: 1px solid rgba(255, 255, 255, 0.34);
+        border-radius: 8px;
+        pointer-events: none;
+    }
+
+    .mpt-title {
+        color: #071421;
+        text-shadow: 0 1px 0 rgba(255, 255, 255, 0.78);
+    }
+
+    .mpt-version,
+    .mpt-status-label,
+    .mpt-wizard-index {
+        font-family: var(--mpt-font-mono);
+        letter-spacing: 0.06em;
+    }
+
+    .mpt-status-card {
+        border-color: rgba(33, 212, 196, 0.20);
+        background:
+            linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(242, 251, 253, 0.88));
+        box-shadow:
+            0 0 0 1px rgba(255, 255, 255, 0.70) inset,
+            0 8px 24px rgba(10, 21, 36, 0.06);
+    }
+
+    .mpt-status-card::before {
+        background: var(--mpt-electric);
+        box-shadow:
+            0 0 0 4px rgba(56, 189, 248, 0.14),
+            0 0 18px rgba(56, 189, 248, 0.44);
+    }
+
+    .mpt-status-card::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        background: linear-gradient(90deg, rgba(33, 212, 196, 0.16), transparent 38%);
+        opacity: 0;
+        transition: opacity var(--mpt-duration) var(--mpt-ease-out);
+        pointer-events: none;
+    }
+
+    .mpt-status-card:hover::after {
+        opacity: 1;
+    }
+
+    .mpt-status-value {
+        font-family: var(--mpt-font-mono);
+        color: #081523;
+    }
+
+    .mpt-wizard-step,
+    [data-testid="stVerticalBlockBorderWrapper"],
+    [data-testid="stMetric"],
+    div[data-testid="stExpander"],
+    [data-testid="stDataFrame"],
+    [data-testid="stDataEditor"] {
+        border-color: rgba(33, 212, 196, 0.22);
+        background:
+            linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(247, 252, 253, 0.90));
+        box-shadow:
+            0 0 0 1px rgba(255, 255, 255, 0.72) inset,
+            var(--mpt-shadow-sm);
+    }
+
+    [data-testid="stVerticalBlockBorderWrapper"] {
+        position: relative;
+        overflow: hidden;
+    }
+
+    [data-testid="stVerticalBlockBorderWrapper"]::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: linear-gradient(90deg, var(--mpt-teal-light), var(--mpt-indigo), transparent);
+        opacity: 0.76;
+        pointer-events: none;
+    }
+
+    [data-testid="stVerticalBlockBorderWrapper"]:focus-within {
+        border-color: rgba(33, 212, 196, 0.52);
+        box-shadow:
+            0 0 0 3px rgba(33, 212, 196, 0.14),
+            0 18px 44px rgba(37, 99, 235, 0.10);
+    }
+
+    .mpt-wizard-step.active {
+        border-color: rgba(33, 212, 196, 0.72);
+        background:
+            linear-gradient(135deg, rgba(236, 254, 255, 0.94), rgba(255, 255, 255, 0.96));
+        box-shadow:
+            0 0 0 1px rgba(33, 212, 196, 0.34) inset,
+            0 14px 36px rgba(37, 99, 235, 0.14);
+    }
+
+    .mpt-wizard-step.active::before {
+        background: linear-gradient(135deg, var(--mpt-teal-light), var(--mpt-indigo));
+        box-shadow:
+            0 0 0 4px rgba(33, 212, 196, 0.16),
+            0 0 22px rgba(56, 189, 248, 0.36);
+    }
+
+    .mpt-section-title::before {
+        width: 5px;
+        height: 24px;
+        background: linear-gradient(180deg, var(--mpt-electric), var(--mpt-teal), var(--mpt-indigo));
+        box-shadow: 0 0 16px rgba(56, 189, 248, 0.38);
     }
 
     [data-testid="stTextInput"] input,
+    [data-testid="stTextArea"] textarea,
     [data-baseweb="select"] > div {
-        min-height: 44px;
-    }
-
-    [data-testid="stFileUploader"] section {
-        border-style: dashed !important;
-        border-width: 1.5px !important;
+        border-color: rgba(130, 158, 177, 0.45) !important;
         background:
-            linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(245, 250, 248, 0.88)) !important;
-    }
-
-    [data-testid="stFileUploader"] section:hover {
-        border-color: rgba(15, 118, 110, 0.48) !important;
-        background-color: #f4fbf8 !important;
+            linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 252, 253, 0.94)) !important;
+        box-shadow: 0 1px 0 rgba(255, 255, 255, 0.72) inset !important;
     }
 
     [data-testid="stTextInput"] input:focus,
     [data-testid="stTextArea"] textarea:focus,
     [data-baseweb="select"] > div:focus-within {
-        border-color: var(--mpt-teal) !important;
-        box-shadow: 0 0 0 3px var(--mpt-focus) !important;
-    }
-
-    [data-testid="stTextArea"] textarea {
-        line-height: 1.58;
+        border-color: var(--mpt-electric) !important;
+        box-shadow:
+            0 0 0 3px rgba(56, 189, 248, 0.17) !important,
+            0 0 20px rgba(33, 212, 196, 0.10) !important;
     }
 
     .stButton > button {
-        min-height: 44px;
-        border-radius: 8px;
-        border: 1px solid var(--mpt-border);
-        font-weight: 760;
-        transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, background 120ms ease;
-        touch-action: manipulation;
+        border-color: rgba(33, 212, 196, 0.26);
+        background:
+            linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(243, 250, 252, 0.92));
+        box-shadow:
+            0 0 0 1px rgba(255, 255, 255, 0.68) inset,
+            0 4px 14px rgba(10, 21, 36, 0.05);
     }
 
     .stButton > button:hover {
-        transform: translateY(-1px);
-        border-color: var(--mpt-teal);
-        box-shadow: 0 12px 22px rgba(23, 33, 43, 0.10);
-    }
-
-    .stButton > button:active {
-        transform: translateY(0);
-        box-shadow: 0 6px 14px rgba(23, 33, 43, 0.09);
+        border-color: rgba(33, 212, 196, 0.68);
+        color: #075e68;
+        background: linear-gradient(180deg, rgba(239, 253, 255, 0.98), rgba(225, 250, 248, 0.92));
+        box-shadow:
+            0 0 0 1px rgba(33, 212, 196, 0.18) inset,
+            0 8px 22px rgba(37, 99, 235, 0.10),
+            0 0 20px rgba(33, 212, 196, 0.12);
     }
 
     .stButton > button[kind="primary"] {
-        background: linear-gradient(135deg, var(--mpt-teal), var(--mpt-indigo));
-        border-color: transparent;
-        color: #ffffff;
-        box-shadow: 0 16px 30px rgba(15, 118, 110, 0.26);
+        background:
+            linear-gradient(135deg, var(--mpt-teal-light) 0%, var(--mpt-indigo) 100%);
+        box-shadow:
+            0 0 0 1px rgba(255, 255, 255, 0.20) inset,
+            0 12px 28px rgba(37, 99, 235, 0.24),
+            0 0 28px rgba(33, 212, 196, 0.22);
     }
 
-    [data-testid="stCheckbox"] label {
-        min-height: 32px;
+    [data-testid="stDataFrame"],
+    [data-testid="stDataEditor"] {
+        background: rgba(255, 255, 255, 0.92);
     }
 
-    [data-testid="stSlider"] [role="slider"] {
-        box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.12);
-    }
-
-    [data-testid="stVideo"] {
+    .mpt-material-table-head {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        min-height: 48px;
+        margin: 8px 0 0;
+        padding: 12px 16px;
         overflow: hidden;
-        border: 1px solid var(--mpt-border);
-        border-radius: 8px;
-        background: #0f172a;
-        box-shadow: var(--mpt-shadow);
+        border: 1px solid rgba(33, 212, 196, 0.28);
+        border-bottom: 0;
+        border-radius: 12px 12px 0 0;
+        background:
+            linear-gradient(90deg, rgba(8, 145, 178, 0.12), rgba(255, 255, 255, 0.86) 45%, rgba(37, 99, 235, 0.10)),
+            linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(236, 254, 255, 0.86));
+        box-shadow:
+            0 0 0 1px rgba(255, 255, 255, 0.72) inset,
+            0 12px 30px rgba(14, 116, 144, 0.10);
     }
 
-    [data-testid="stAlert"] {
-        border-radius: 8px;
-        border: 1px solid var(--mpt-border);
+    .mpt-material-table-head::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background:
+            linear-gradient(90deg, transparent, rgba(56, 189, 248, 0.26), transparent),
+            repeating-linear-gradient(90deg, rgba(8, 145, 178, 0.10) 0 1px, transparent 1px 18px);
+        opacity: 0.55;
     }
 
-    [data-testid="stTabs"] button {
-        min-height: 42px;
-        font-weight: 720;
+    .mpt-material-table-title,
+    .mpt-material-table-meta {
+        position: relative;
+        z-index: 1;
     }
 
-    @media (max-width: 900px) {
+    .mpt-material-table-title {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        color: #082f49;
+        font-size: 0.9rem;
+        font-weight: 800;
+        letter-spacing: 0;
+    }
+
+    .mpt-material-table-title::before {
+        content: "";
+        width: 9px;
+        height: 9px;
+        border-radius: 999px;
+        background: #21d4c4;
+        box-shadow:
+            0 0 0 5px rgba(33, 212, 196, 0.13),
+            0 0 22px rgba(56, 189, 248, 0.42);
+    }
+
+    .mpt-material-table-meta {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        color: #386276;
+        font-size: 0.76rem;
+        font-weight: 700;
+    }
+
+    .mpt-material-table-chip {
+        display: inline-flex;
+        align-items: center;
+        min-height: 26px;
+        padding: 4px 10px;
+        border: 1px solid rgba(33, 212, 196, 0.28);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.72);
+        color: #075e68;
+        box-shadow: 0 0 18px rgba(33, 212, 196, 0.10);
+        white-space: nowrap;
+    }
+
+    [data-testid="stElementContainer"]:has(.mpt-material-table-head) + div :is([data-testid="stDataEditor"], [data-testid="stDataFrame"]),
+    [data-testid="stElementContainer"]:has(.mpt-material-table-head) + [data-testid="stElementContainer"] :is([data-testid="stDataEditor"], [data-testid="stDataFrame"]) {
+        position: relative;
+        margin-top: 0 !important;
+        padding: 1px;
+        overflow: hidden;
+        border: 1px solid rgba(33, 212, 196, 0.34);
+        border-top: 0;
+        border-radius: 0 0 12px 12px;
+        background:
+            linear-gradient(135deg, rgba(34, 211, 238, 0.42), rgba(79, 70, 229, 0.22)),
+            rgba(255, 255, 255, 0.94);
+        box-shadow:
+            0 0 0 1px rgba(255, 255, 255, 0.72) inset,
+            0 18px 42px rgba(15, 23, 42, 0.10),
+            0 0 30px rgba(33, 212, 196, 0.12);
+    }
+
+    [data-testid="stElementContainer"]:has(.mpt-material-table-head) + div :is([data-testid="stDataEditor"], [data-testid="stDataFrame"]) > div,
+    [data-testid="stElementContainer"]:has(.mpt-material-table-head) + [data-testid="stElementContainer"] :is([data-testid="stDataEditor"], [data-testid="stDataFrame"]) > div {
+        overflow: hidden;
+        border-radius: 0 0 11px 11px;
+        border-color: rgba(33, 212, 196, 0.12) !important;
+        background:
+            linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(242, 250, 252, 0.96)) !important;
+    }
+
+    [data-testid="stElementContainer"]:has(.mpt-material-table-head) + div :is([data-testid="stDataEditor"], [data-testid="stDataFrame"]) canvas,
+    [data-testid="stElementContainer"]:has(.mpt-material-table-head) + [data-testid="stElementContainer"] :is([data-testid="stDataEditor"], [data-testid="stDataFrame"]) canvas {
+        border-radius: 0 0 10px 10px;
+        filter: saturate(1.08) contrast(1.02);
+    }
+
+    [data-testid="stTabs"] button[aria-selected="true"] {
+        color: #075e68;
+        text-shadow: 0 0 18px rgba(56, 189, 248, 0.20);
+    }
+
+    /* ============================================================
+       Responsive Breakpoints
+       ============================================================ */
+    @media (max-width: 960px) {
+        :root {
+            --mpt-page-gutter: 1rem;
+            --mpt-sticky-top: 0;
+        }
         .block-container {
             padding-left: 1rem;
             padding-right: 1rem;
         }
-
+        .mpt-topbar {
+            flex-wrap: wrap;
+            align-items: flex-start;
+            padding-right: 0;
+        }
+        .mpt-topbar-actions {
+            width: calc(100% - var(--mpt-settings-space) - 12px);
+            max-width: calc(100% - var(--mpt-settings-space) - 12px);
+            margin-left: 0;
+        }
         .mpt-status-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
         }
-
         .mpt-sticky-shell {
-            min-height: 14.6rem;
+            min-height: 14.4rem;
         }
-
         .mpt-sticky-summary {
             width: calc(100% - 2rem);
         }
-
         [data-testid="stElementContainer"]:has(#mpt-settings-popover-marker),
         [data-testid="stElementContainer"]:has(#mpt-settings-popover-marker) + div {
             right: 1rem;
         }
+        [data-testid="stElementContainer"]:has(#mpt-material-library-popover-marker),
+        [data-testid="stElementContainer"]:has(#mpt-material-library-popover-marker) + div {
+            top: 169px;
+            right: 1rem;
+            width: calc((100vw - 2rem - 12px) / 2) !important;
+        }
+        .mpt-wizard {
+            gap: 10px;
+        }
+        .mpt-wizard-step {
+            padding: 12px 12px 12px 50px;
+        }
     }
 
-    @media (max-width: 640px) {
-        h1 {
-            font-size: 1.55rem !important;
+    @media (max-width: 680px) {
+        :root {
+            --mpt-page-gutter: 1rem;
+            --mpt-sticky-top: 0;
         }
-
-        .mpt-title {
-            font-size: 1.55rem;
+        h1 { font-size: 1.5rem !important; }
+        .mpt-title { font-size: 1.5rem; }
+        .mpt-mark {
+            width: 40px;
+            height: 40px;
+            font-size: 0.95rem;
         }
-
         .mpt-topbar {
-            align-items: flex-start;
+            gap: 12px;
         }
-
+        .mpt-topbar-actions {
+            width: 100%;
+            max-width: 100%;
+        }
         .mpt-status-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 8px;
         }
-
         .mpt-status-card {
-            min-height: 68px;
-            padding: 11px 12px;
+            min-height: 66px;
+            padding: 11px 12px 11px 36px;
         }
-
+        .mpt-status-card::before {
+            top: 15px;
+            left: 13px;
+            width: 6px;
+            height: 6px;
+        }
         .mpt-status-label {
-            font-size: 0.72rem;
-            margin-bottom: 5px;
+            font-size: 0.68rem;
+            margin-bottom: 3px;
         }
-
-        .mpt-status-value {
-            font-size: 0.92rem;
-        }
-
-        .mpt-sticky-shell {
-            min-height: 16.2rem;
-        }
-
+        .mpt-status-value { font-size: 0.88rem; }
+        .mpt-sticky-shell { min-height: 15.8rem; }
         .mpt-sticky-summary {
             top: 0;
-            padding-bottom: 0.7rem;
+            padding-bottom: 0.6rem;
         }
-
         [data-testid="stElementContainer"]:has(#mpt-settings-popover-marker),
         [data-testid="stElementContainer"]:has(#mpt-settings-popover-marker) + div {
-            top: 0.4rem;
+            top: 0.3rem;
         }
-
+        [data-testid="stElementContainer"]:has(#mpt-material-library-popover-marker),
+        [data-testid="stElementContainer"]:has(#mpt-material-library-popover-marker) + div {
+            top: 146px;
+            right: 1rem;
+            width: calc((100vw - 2rem - 8px) / 2) !important;
+        }
+        [data-testid="stElementContainer"]:has(#mpt-material-library-popover-marker) + div button {
+            min-height: 66px;
+            padding: 11px 12px 11px 36px;
+        }
+        [data-testid="stElementContainer"]:has(#mpt-material-library-popover-marker) + div button::before {
+            top: 15px;
+            left: 13px;
+            width: 6px;
+            height: 6px;
+        }
+        [data-testid="stElementContainer"]:has(#mpt-material-library-popover-marker) + div button::after {
+            left: 36px;
+            right: 12px;
+            top: 33px;
+            font-size: 0.88rem;
+        }
+        [data-testid="stElementContainer"]:has(#mpt-material-library-popover-marker) + div button p {
+            left: 36px;
+            right: 30px;
+            top: 11px;
+            font-size: 0.66rem;
+        }
+        [data-testid="stElementContainer"]:has(#mpt-material-library-popover-marker) + div button svg,
+        [data-testid="stElementContainer"]:has(#mpt-material-library-popover-marker) + div button [data-testid="stIconMaterial"] {
+            top: 11px;
+            right: 10px;
+        }
         .mpt-wizard {
             grid-template-columns: 1fr;
         }
+        [data-testid="stVerticalBlockBorderWrapper"] {
+            padding: 1rem 1rem 1.1rem;
+        }
+        .mpt-generating-dialog {
+            padding: 26px 22px 22px;
+        }
+        [data-testid="stPopoverBody"] {
+            width: calc(100vw - 20px) !important;
+            max-width: calc(100vw - 20px) !important;
+            min-width: calc(100vw - 20px) !important;
+        }
+        [data-testid="stPopoverBody"]:has(#mpt-material-library-body-marker) {
+            height: calc(100vh - 20px) !important;
+            max-height: calc(100vh - 20px) !important;
+        }
     }
 
+    /* ============================================================
+       Accessibility: Reduced Motion
+       ============================================================ */
     @media (prefers-reduced-motion: reduce) {
         .mpt-generating-spinner,
         .mpt-generating-progress::before {
-            animation-duration: 2.4s;
+            animation-duration: 2.6s;
+        }
+        .stButton > button,
+        [data-testid="stTextInput"] input,
+        [data-testid="stTextArea"] textarea,
+        [data-baseweb="select"] > div,
+        [data-testid="stVerticalBlockBorderWrapper"],
+        .mpt-wizard-step,
+        .mpt-status-card,
+        .mpt-mark,
+        [data-testid="stMetric"],
+        div[data-testid="stExpander"] {
+            transition: none !important;
         }
     }
 </style>
@@ -786,6 +1704,21 @@ if "match_materials_to_script" not in st.session_state:
     st.session_state["match_materials_to_script"] = bool(
         config.app.get("match_materials_to_script", False)
     )
+if "video_clip_duration_value" not in st.session_state:
+    saved_clip_duration = config.app.get(
+        "video_clip_duration",
+        st.session_state.get("video_clip_duration", 3),
+    )
+    try:
+        saved_clip_duration = int(saved_clip_duration)
+    except (TypeError, ValueError):
+        saved_clip_duration = 3
+    if saved_clip_duration not in [2, 3, 4, 5, 6, 7, 8, 9, 10]:
+        saved_clip_duration = 3
+    st.session_state["video_clip_duration_value"] = saved_clip_duration
+st.session_state["video_clip_duration"] = int(
+    st.session_state.get("video_clip_duration_value", 3)
+)
 st.session_state["ui_language"] = "zh"
 config.ui["language"] = "zh"
 if "local_video_materials" not in st.session_state:
@@ -793,6 +1726,11 @@ if "local_video_materials" not in st.session_state:
     st.session_state["local_video_materials"] = []
 if "local_library_video_materials" not in st.session_state:
     st.session_state["local_library_video_materials"] = []
+if "local_library_usage_mode" not in st.session_state:
+    saved_library_usage_mode = config.app.get("local_library_usage_mode", "random")
+    if saved_library_usage_mode not in ["random", "selected"]:
+        saved_library_usage_mode = "random"
+    st.session_state["local_library_usage_mode"] = saved_library_usage_mode
 
 # 加载语言文件
 locales = utils.load_locales(i18n_dir)
@@ -830,7 +1768,15 @@ with title_col:
     current_llm_key = str(config.app.get("llm_provider", "openai")).lower()
     current_source_key = str(config.app.get("video_source", "pexels")).lower()
     current_tts_key = str(config.ui.get("tts_server", "azure-tts-v1"))
-    current_llm = escape(llm_provider_labels.get(current_llm_key, current_llm_key))
+    current_llm_label = llm_provider_labels.get(current_llm_key, current_llm_key)
+    current_llm_model = str(
+        config.app.get(f"{current_llm_key}_model_name", "")
+    ).strip()
+    current_llm = escape(
+        f"{current_llm_label} · {current_llm_model}"
+        if current_llm_model
+        else current_llm_label
+    )
     current_source = escape(
         video_source_labels.get(current_source_key, current_source_key)
     )
@@ -841,9 +1787,28 @@ with title_col:
         <div class="mpt-sticky-summary">
         <div class="mpt-topbar">
             <div class="mpt-mark">创</div>
-            <div>
+            <div class="mpt-topbar-brand">
                 <div class="mpt-title">混剪智能体</div>
                 <div class="mpt-version">v{escape(str(config.project_version))}</div>
+            </div>
+            <div class="mpt-topbar-actions">
+                <a href="/History" target="_self" style="text-decoration: none;">
+                    <button style="
+                        background: linear-gradient(135deg, var(--mpt-cyan) 0%, var(--mpt-purple) 100%);
+                        border: 1px solid var(--mpt-cyan);
+                        color: #0a0e17;
+                        font-weight: 600;
+                        padding: 10px 20px;
+                        border-radius: 10px;
+                        cursor: pointer;
+                        box-shadow: var(--mpt-shadow-glow);
+                        transition: all 0.2s ease;
+                        font-size: 14px;
+                        white-space: nowrap;
+                    " onmouseover="this.style.transform='translateY(-2px) scale(1.05)'; this.style.boxShadow='0 0 50px var(--mpt-cyan-glow), 0 0 70px var(--mpt-purple-glow)';" onmouseout="this.style.transform=''; this.style.boxShadow='var(--mpt-shadow-glow)';">
+                        📜 生成历史
+                    </button>
+                </a>
             </div>
         </div>
         <div class="mpt-status-grid">
@@ -860,8 +1825,8 @@ with title_col:
                 <div class="mpt-status-value">{current_tts}</div>
             </div>
             <div class="mpt-status-card">
-                <div class="mpt-status-label">画布比例</div>
-                <div class="mpt-status-value">9:16</div>
+                <div class="mpt-status-label">状态</div>
+                <div class="mpt-status-value">运行中</div>
             </div>
         </div>
         </div>
@@ -1050,6 +2015,47 @@ def format_material_file_size(size_bytes):
     return f"{size:.1f} GB"
 
 
+def format_material_duration(duration_seconds):
+    if not duration_seconds or duration_seconds <= 0:
+        return "-"
+    total_seconds = int(round(duration_seconds))
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    if hours:
+        return f"{hours}:{minutes:02d}:{seconds:02d}"
+    return f"{minutes}:{seconds:02d}"
+
+
+@st.cache_data(show_spinner=False)
+def read_material_video_duration(file_path, file_mtime, file_size):
+    try:
+        from moviepy import VideoFileClip
+
+        clip = VideoFileClip(file_path, audio=False)
+        try:
+            return float(clip.duration or 0)
+        finally:
+            clip.close()
+    except Exception as exc:
+        logger.warning(f"failed to read material duration: {file_path}, error: {str(exc)}")
+        return 0.0
+
+
+def get_material_duration_label(file_path):
+    if get_material_kind(file_path) != "视频":
+        return "-"
+    try:
+        stat_result = os.stat(file_path)
+    except OSError:
+        return "-"
+    duration = read_material_video_duration(
+        file_path,
+        stat_result.st_mtime,
+        stat_result.st_size,
+    )
+    return format_material_duration(duration)
+
+
 def get_material_modified_time(file_path):
     try:
         return datetime.fromtimestamp(os.path.getmtime(file_path)).strftime(
@@ -1119,6 +2125,48 @@ def sync_selected_library_material(old_path=None, new_path=None):
         st.session_state[state_key] = synced_paths
 
 
+def get_material_table_signature(material_paths):
+    joined_paths = "\n".join(str(material_path) for material_path in material_paths)
+    return hashlib.md5(joined_paths.encode("utf-8")).hexdigest()[:10]
+
+
+def sync_material_checkbox_selection(
+    editor_key,
+    selected_key,
+    all_materials,
+    visible_materials,
+):
+    editor_state = st.session_state.get(editor_key, {})
+    if not isinstance(editor_state, dict):
+        return
+
+    edited_rows = editor_state.get("edited_rows", {})
+    if not isinstance(edited_rows, dict):
+        return
+
+    valid_paths = set(all_materials)
+    selected_set = {
+        material_path
+        for material_path in st.session_state.get(selected_key, [])
+        if material_path in valid_paths
+    }
+    for row_index, row_changes in edited_rows.items():
+        if not isinstance(row_changes, dict) or "选择" not in row_changes:
+            continue
+        try:
+            material_path = visible_materials[int(row_index)]
+        except (ValueError, IndexError):
+            continue
+        if row_changes["选择"]:
+            selected_set.add(material_path)
+        else:
+            selected_set.discard(material_path)
+
+    st.session_state[selected_key] = [
+        material_path for material_path in all_materials if material_path in selected_set
+    ]
+
+
 def render_local_material_selection_list(all_materials, visible_materials, key_prefix):
     selected_key = f"{key_prefix}_selected_paths"
     valid_paths = set(all_materials)
@@ -1136,11 +2184,18 @@ def render_local_material_selection_list(all_materials, visible_materials, key_p
         ]
         if not selected_paths:
             selected_paths = list(all_materials)
+    st.session_state[selected_key] = [
+        material_path for material_path in all_materials if material_path in set(selected_paths)
+    ]
+    selected_paths = st.session_state[selected_key]
 
     existing_visible_materials = [
         material_path for material_path in visible_materials if os.path.exists(material_path)
     ]
     selected_set = set(selected_paths)
+    table_version_key = f"{key_prefix}_selection_table_version"
+    if table_version_key not in st.session_state:
+        st.session_state[table_version_key] = 0
     action_cols = st.columns([0.75, 0.75, 2.5])
     if action_cols[0].button(
         "全选",
@@ -1149,7 +2204,8 @@ def render_local_material_selection_list(all_materials, visible_materials, key_p
     ):
         selected_set.update(existing_visible_materials)
         st.session_state[selected_key] = list(selected_set)
-        st.rerun()
+        st.session_state[table_version_key] += 1
+        st.rerun(scope="fragment")
     if action_cols[1].button(
         "清空",
         key=f"{key_prefix}_clear_visible",
@@ -1157,7 +2213,8 @@ def render_local_material_selection_list(all_materials, visible_materials, key_p
     ):
         selected_set.difference_update(existing_visible_materials)
         st.session_state[selected_key] = list(selected_set)
-        st.rerun()
+        st.session_state[table_version_key] += 1
+        st.rerun(scope="fragment")
     selected_visible_count = sum(
         1 for material_path in existing_visible_materials if material_path in selected_set
     )
@@ -1175,44 +2232,78 @@ def render_local_material_selection_list(all_materials, visible_materials, key_p
             "选择": file_path in selected_set,
             "素材名称": material_display_name(file_path),
             "类型": get_material_kind(file_path),
+            "时长": get_material_duration_label(file_path),
             "大小": format_material_file_size(os.path.getsize(file_path)),
         }
         for file_path in existing_visible_materials
     ]
     visible_row_count = min(len(material_rows), 5)
-    editor_height = 42 + max(1, visible_row_count) * 34
-    edited_materials = st.data_editor(
-        pd.DataFrame(material_rows),
-        hide_index=True,
-        use_container_width=True,
-        height=editor_height,
-        row_height=34,
-        disabled=["素材名称", "类型", "大小"],
-        column_order=["选择", "素材名称", "类型", "大小"],
-        column_config={
-            "选择": st.column_config.CheckboxColumn(
-                "选择",
-                default=False,
-                width="small",
-            ),
-            "素材名称": st.column_config.TextColumn("素材名称", width="medium"),
-            "类型": st.column_config.TextColumn("类型", width="small"),
-            "大小": st.column_config.TextColumn("大小", width="small"),
-        },
-        key=f"{key_prefix}_selection_table",
+    editor_height = 46 + max(1, visible_row_count) * 38
+    st.markdown(
+        f"""
+        <div class="mpt-material-table-head">
+            <div class="mpt-material-table-title">素材矩阵</div>
+            <div class="mpt-material-table-meta">
+                <span class="mpt-material-table-chip">当前 {len(existing_visible_materials)} 个</span>
+                <span class="mpt-material-table-chip">已选 {selected_visible_count} 个</span>
+                <span class="mpt-material-table-chip">最多显示 5 行</span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
-
-    updated_selected = {
-        material_path for material_path in selected_set if material_path not in existing_visible_materials
-    }
-    for row_index, checked in enumerate(edited_materials["选择"].tolist()):
-        if row_index >= len(existing_visible_materials):
-            continue
-        if checked:
-            updated_selected.add(existing_visible_materials[row_index])
-    st.session_state[selected_key] = [
-        material_path for material_path in all_materials if material_path in updated_selected
-    ]
+    editor_key = (
+        f"{key_prefix}_selection_table_"
+        f"{get_material_table_signature(existing_visible_materials)}_"
+        f"{st.session_state[table_version_key]}"
+    )
+    with st.form(key=f"{editor_key}_form", border=False):
+        edited_material_rows = st.data_editor(
+            pd.DataFrame(material_rows),
+            hide_index=True,
+            use_container_width=True,
+            height=editor_height,
+            row_height=38,
+            disabled=["素材名称", "类型", "时长", "大小"],
+            column_order=["选择", "素材名称", "类型", "时长", "大小"],
+            column_config={
+                "选择": st.column_config.CheckboxColumn(
+                    "选择",
+                    default=False,
+                    width="small",
+                ),
+                "素材名称": st.column_config.TextColumn("素材名称", width="medium"),
+                "类型": st.column_config.TextColumn("类型", width="small"),
+                "时长": st.column_config.TextColumn("时长", width="small"),
+                "大小": st.column_config.TextColumn("大小", width="small"),
+            },
+            key=editor_key,
+        )
+        st.caption("勾选素材后点击“应用选择”，避免每次勾选都刷新整个选择区。")
+        apply_selection = st.form_submit_button(
+            "应用选择",
+            use_container_width=True,
+        )
+    if apply_selection:
+        updated_selected_set = {
+            material_path
+            for material_path in st.session_state.get(selected_key, [])
+            if material_path in valid_paths
+        }
+        for material_path, is_selected in zip(
+            existing_visible_materials,
+            edited_material_rows["选择"].tolist(),
+        ):
+            if is_selected:
+                updated_selected_set.add(material_path)
+            else:
+                updated_selected_set.discard(material_path)
+        st.session_state[selected_key] = [
+            material_path
+            for material_path in all_materials
+            if material_path in updated_selected_set
+        ]
+        st.rerun(scope="fragment")
     return st.session_state[selected_key]
 
 
@@ -1274,25 +2365,128 @@ def render_local_material_library_manager(
     if compact:
         return filtered_materials
 
+    available_materials = [
+        file_path for file_path in filtered_materials if os.path.exists(file_path)
+    ]
+    if not available_materials:
+        st.warning("没有可用素材")
+        return [] if compact else library_materials
+
+    batch_delete_key = f"{key_prefix}_batch_delete_paths"
+    batch_selected_paths = [
+        file_path
+        for file_path in st.session_state.get(batch_delete_key, [])
+        if file_path in available_materials
+    ]
+    st.session_state[batch_delete_key] = [
+        file_path for file_path in available_materials if file_path in set(batch_selected_paths)
+    ]
+    batch_selected_paths = st.session_state[batch_delete_key]
+    batch_selected_set = set(batch_selected_paths)
     material_rows = [
         {
+            "选择": file_path in batch_selected_set,
             "名称": material_display_name(file_path),
             "类型": get_material_kind(file_path),
+            "时长": get_material_duration_label(file_path),
             "大小": format_material_file_size(os.path.getsize(file_path)),
             "修改时间": get_material_modified_time(file_path),
         }
-        for file_path in filtered_materials
-        if os.path.exists(file_path)
+        for file_path in available_materials
     ]
-    st.dataframe(material_rows, hide_index=True, use_container_width=True)
+
+    batch_table_version_key = f"{key_prefix}_library_table_version"
+    if batch_table_version_key not in st.session_state:
+        st.session_state[batch_table_version_key] = 0
+    batch_action_cols = st.columns([1, 1, 2.6])
+    if batch_action_cols[0].button(
+        "全选当前列表",
+        key=f"{key_prefix}_batch_select_all",
+        use_container_width=True,
+    ):
+        st.session_state[batch_delete_key] = list(available_materials)
+        st.session_state[batch_table_version_key] += 1
+        st.rerun()
+    if batch_action_cols[1].button(
+        "清空选择",
+        key=f"{key_prefix}_batch_clear",
+        use_container_width=True,
+    ):
+        st.session_state[batch_delete_key] = []
+        st.session_state[batch_table_version_key] += 1
+        st.rerun()
+    batch_action_cols[2].caption(
+        f"当前列表 {len(available_materials)} 个，已选择 {len(batch_selected_set)} 个"
+    )
+
+    batch_editor_key = (
+        f"{key_prefix}_library_table_"
+        f"{get_material_table_signature(available_materials)}_"
+        f"{st.session_state[batch_table_version_key]}"
+    )
+    st.data_editor(
+        pd.DataFrame(material_rows),
+        hide_index=True,
+        use_container_width=True,
+        height=300,
+        row_height=34,
+        disabled=["名称", "类型", "时长", "大小", "修改时间"],
+        column_order=["选择", "名称", "类型", "时长", "大小", "修改时间"],
+        column_config={
+            "选择": st.column_config.CheckboxColumn(
+                "选择",
+                default=False,
+                width="small",
+            ),
+            "名称": st.column_config.TextColumn("名称", width="medium"),
+            "类型": st.column_config.TextColumn("类型", width="small"),
+            "时长": st.column_config.TextColumn("时长", width="small"),
+            "大小": st.column_config.TextColumn("大小", width="small"),
+            "修改时间": st.column_config.TextColumn("修改时间", width="medium"),
+        },
+        key=batch_editor_key,
+        on_change=sync_material_checkbox_selection,
+        args=(batch_editor_key, batch_delete_key, available_materials, available_materials),
+    )
+    batch_delete_count = len(st.session_state[batch_delete_key])
+    delete_confirm_col, delete_button_col = st.columns([2.3, 1])
+    confirm_batch_delete = delete_confirm_col.checkbox(
+        f"确认批量删除已选 {batch_delete_count} 个素材",
+        key=f"{key_prefix}_confirm_batch_delete",
+        disabled=batch_delete_count == 0,
+    )
+    if delete_button_col.button(
+        "批量删除",
+        key=f"{key_prefix}_batch_delete_btn",
+        use_container_width=True,
+        disabled=batch_delete_count == 0 or not confirm_batch_delete,
+    ):
+        deleted_count = 0
+        failed_names = []
+        for material_path in list(st.session_state[batch_delete_key]):
+            try:
+                delete_local_material(material_path)
+                sync_selected_library_material(material_path, None)
+                deleted_count += 1
+            except Exception:
+                failed_names.append(material_display_name(material_path))
+        st.session_state[batch_delete_key] = []
+        selected_key_to_clear = f"{key_prefix}_selected"
+        if st.session_state.get(selected_key_to_clear) not in list_local_material_library():
+            st.session_state.pop(selected_key_to_clear, None)
+        if failed_names:
+            st.warning(f"已删除 {deleted_count} 个素材，{len(failed_names)} 个删除失败")
+        else:
+            st.success(f"已批量删除 {deleted_count} 个素材")
+        st.rerun()
 
     selected_key = f"{key_prefix}_selected"
-    if st.session_state.get(selected_key) not in filtered_materials:
+    if st.session_state.get(selected_key) not in available_materials:
         st.session_state.pop(selected_key, None)
 
     selected_material = st.selectbox(
         "查看素材",
-        options=filtered_materials,
+        options=available_materials,
         format_func=material_display_name,
         key=selected_key,
     )
@@ -1349,6 +2543,29 @@ def render_local_material_library_manager(
                     st.error(str(e))
 
     return list_local_material_library()
+
+
+@st.fragment
+def render_local_library_selection_fragment(library_materials):
+    # 手动勾选素材时，只让这一小块局部 rerun，避免整页重新抖动。
+    visible_library_materials = render_local_material_library_manager(
+        key_prefix="video_source_library",
+        compact=True,
+        show_upload=False,
+        show_stats=False,
+    )
+    st.markdown("##### 选择本次使用的素材")
+    selected_library_materials = render_local_material_selection_list(
+        all_materials=library_materials,
+        visible_materials=visible_library_materials,
+        key_prefix="local_library",
+    )
+    st.caption(
+        f"素材库共 {len(library_materials)} 个素材，当前列表 {len(visible_library_materials)} 个，本次将使用 {len(selected_library_materials)} 个。"
+    )
+    st.session_state["local_library_video_materials"] = (
+        material_paths_to_session_materials(selected_library_materials)
+    )
 
 
 def open_task_folder(task_id):
@@ -1645,7 +2862,12 @@ def hydrate_params_from_saved_state(params):
     except ValueError:
         params.video_aspect = VideoAspect(default_aspect_value)
 
-    params.video_clip_duration = int(st.session_state.get("video_clip_duration", 3))
+    params.video_clip_duration = int(
+        st.session_state.get(
+            "video_clip_duration_value",
+            st.session_state.get("video_clip_duration", 3),
+        )
+    )
     params.video_count = int(st.session_state.get("video_count", 1))
     params.match_materials_to_script = bool(
         st.session_state.get(
@@ -1672,8 +2894,8 @@ config.app["hide_config"] = False
 config.ui["hide_log"] = False
 st.markdown('<span id="mpt-settings-popover-marker"></span>', unsafe_allow_html=True)
 with st.popover("设置", key="top_settings_popover"):
-    middle_config_panel, right_config_panel, api_key_panel, material_library_panel = st.tabs(
-        ["大模型", "视频源", "Key 管理", "素材库"]
+    middle_config_panel, right_config_panel, api_key_panel = st.tabs(
+        ["大模型", "视频源", "Key 管理"]
     )
 
     # 左侧面板 - 大模型设置
@@ -1918,7 +3140,7 @@ with st.popover("设置", key="top_settings_popover"):
 
         if llm_provider == "deepseek":
             if not llm_model_name:
-                llm_model_name = "deepseek-chat"
+                llm_model_name = "deepseekv-4flash"
             if not llm_base_url:
                 llm_base_url = "https://api.deepseek.com"
             with llm_helper:
@@ -1926,7 +3148,7 @@ with st.popover("设置", key="top_settings_popover"):
                         ##### DeepSeek 配置说明
                         - **API Key**: [点击到官网申请](https://platform.deepseek.com/api_keys)
                         - **Base Url**: 固定为 https://api.deepseek.com
-                        - **Model Name**: 固定为 deepseek-chat
+                        - **Model Name**: 可在 deepseekv-4flash、deepseek-chat、deepseek-reasoner 之间切换
                         """
 
         if llm_provider == "glm":
@@ -2042,6 +3264,20 @@ with st.popover("设置", key="top_settings_popover"):
                         st.caption(
                             "Add a Groq API key to load available models automatically."
                         )
+            elif llm_provider == "deepseek":
+                deepseek_model_options = [
+                    "deepseekv-4flash",
+                    "deepseek-chat",
+                    "deepseek-reasoner",
+                ]
+                if llm_model_name and llm_model_name not in deepseek_model_options:
+                    deepseek_model_options.append(llm_model_name)
+                st_llm_model_name = st.selectbox(
+                    tr("Model Name"),
+                    options=deepseek_model_options,
+                    index=deepseek_model_options.index(llm_model_name),
+                    key="deepseek_model_name_select",
+                )
             else:
                 st_llm_model_name = st.text_input(
                     tr("Model Name"),
@@ -2110,12 +3346,20 @@ with st.popover("设置", key="top_settings_popover"):
     with api_key_panel:
         render_video_api_key_manager()
 
-    with material_library_panel:
-        st.subheader("本地素材库")
-        render_local_material_library_manager(
-            key_prefix="settings_material_library",
-            compact=False,
-        )
+st.markdown(
+    '<span id="mpt-material-library-popover-marker"></span>',
+    unsafe_allow_html=True,
+)
+with st.popover("素材库管理", key="top_material_library_popover"):
+    st.markdown(
+        '<span id="mpt-material-library-body-marker"></span>',
+        unsafe_allow_html=True,
+    )
+    st.subheader("本地素材库")
+    render_local_material_library_manager(
+        key_prefix="top_material_library",
+        compact=False,
+    )
 
 llm_provider = config.app.get("llm_provider", "").lower()
 valid_wizard_steps = {"script", "media", "result"}
@@ -2353,33 +3597,64 @@ if render_media_step:
                     )
 
             if params.video_source == "local_library":
-                visible_library_materials = render_local_material_library_manager(
-                    key_prefix="video_source_library",
-                    compact=True,
-                    show_upload=False,
-                    show_stats=False,
-                )
                 library_materials = list_local_material_library()
                 if not library_materials:
                     st.info("本地素材库暂无素材，请到顶部设置中的素材库添加素材。")
                     st.session_state["local_library_video_materials"] = []
                 else:
-                    st.markdown("##### 选择本次使用的素材")
-                    selected_library_materials = render_local_material_selection_list(
-                        all_materials=library_materials,
-                        visible_materials=visible_library_materials,
-                        key_prefix="local_library",
+                    library_video_materials = [
+                        material_path
+                        for material_path in library_materials
+                        if os.path.exists(material_path)
+                        and get_material_kind(material_path) == "视频"
+                    ]
+                    usage_modes = [
+                        ("随机从素材库抽取视频", "random"),
+                        ("按我选择的素材生成", "selected"),
+                    ]
+                    usage_mode_labels = {value: label for label, value in usage_modes}
+                    saved_usage_mode = st.session_state.get(
+                        "local_library_usage_mode",
+                        config.app.get("local_library_usage_mode", "random"),
                     )
-                    st.caption(
-                        f"素材库共 {len(library_materials)} 个素材，当前列表 {len(visible_library_materials)} 个，本次将使用 {len(selected_library_materials)} 个。"
+                    if saved_usage_mode not in usage_mode_labels:
+                        saved_usage_mode = "random"
+                        st.session_state["local_library_usage_mode"] = saved_usage_mode
+                    selected_usage_mode = st.radio(
+                        "素材使用方式",
+                        options=[value for _, value in usage_modes],
+                        format_func=lambda value: usage_mode_labels[value],
+                        index=[value for _, value in usage_modes].index(saved_usage_mode),
+                        horizontal=True,
+                        key="local_library_usage_mode",
                     )
-                    st.session_state["local_library_video_materials"] = (
-                        material_paths_to_session_materials(selected_library_materials)
-                    )
+                    config.app["local_library_usage_mode"] = selected_usage_mode
+
+                    if selected_usage_mode == "random":
+                        st.session_state["local_library_video_materials"] = (
+                            material_paths_to_session_materials(library_video_materials)
+                        )
+                        if library_video_materials:
+                            st.caption(
+                                f"素材库共 {len(library_materials)} 个素材，其中 {len(library_video_materials)} 个视频可用于随机抽取。"
+                                "生成时会自动打散素材顺序；如需指定素材，请切换为“按我选择的素材生成”。"
+                            )
+                        else:
+                            st.warning(
+                                "素材库中还没有可随机抽取的视频，请先添加视频素材，或切换为手动选择图片/视频素材。"
+                            )
+                    else:
+                        render_local_library_selection_fragment(library_materials)
 
             saved_concat_value = st.session_state.get(
                 "video_concat_mode", VideoConcatMode.random.value
             )
+            force_random_library_materials = (
+                params.video_source == "local_library"
+                and st.session_state.get("local_library_usage_mode", "random") == "random"
+            )
+            if force_random_library_materials:
+                saved_concat_value = VideoConcatMode.random.value
             saved_concat_index = 1
             for i, (_, mode_value) in enumerate(video_concat_modes):
                 if mode_value == saved_concat_value:
@@ -2394,11 +3669,16 @@ if render_media_step:
                 format_func=lambda x: video_concat_modes[x][
                     0
                 ],  # The label is displayed to the user
+                disabled=force_random_library_materials,
             )
             params.video_concat_mode = VideoConcatMode(
                 video_concat_modes[selected_index][1]
             )
             st.session_state["video_concat_mode"] = params.video_concat_mode.value
+            if force_random_library_materials:
+                params.video_concat_mode = VideoConcatMode.random
+                st.session_state["video_concat_mode"] = VideoConcatMode.random.value
+                st.caption("随机抽取素材库视频时，系统会自动使用随机拼接模式。")
 
             # 视频转场模式
             video_transition_modes = [
@@ -2465,7 +3745,12 @@ if render_media_step:
             )
 
             clip_duration_options = [2, 3, 4, 5, 6, 7, 8, 9, 10]
-            saved_clip_duration = int(st.session_state.get("video_clip_duration", 3))
+            saved_clip_duration = int(
+                st.session_state.get(
+                    "video_clip_duration_value",
+                    st.session_state.get("video_clip_duration", 3),
+                )
+            )
             clip_duration_index = (
                 clip_duration_options.index(saved_clip_duration)
                 if saved_clip_duration in clip_duration_options
@@ -2475,8 +3760,10 @@ if render_media_step:
                 tr("Clip Duration"),
                 options=clip_duration_options,
                 index=clip_duration_index,
-                key="video_clip_duration",
+                key="video_clip_duration_value",
             )
+            st.session_state["video_clip_duration"] = int(params.video_clip_duration)
+            config.app["video_clip_duration"] = int(params.video_clip_duration)
             video_count_options = [1, 2, 3, 4, 5]
             saved_video_count = int(st.session_state.get("video_count", 1))
             video_count_index = (
@@ -2494,12 +3781,20 @@ if render_media_step:
             with st.expander(tr("Advanced Video Settings"), expanded=False):
                 # 默认关闭，避免影响老用户的随机素材体验。开启后只改变关键词和素材
                 # 下载/拼接顺序，用于改善画面主题早于或晚于旁白的问题。
+                if force_random_library_materials:
+                    st.session_state["match_materials_to_script"] = False
                 params.match_materials_to_script = st.checkbox(
                     tr("Match Materials to Script Order"),
                     help=tr("Match Materials to Script Order Help"),
                     key="match_materials_to_script",
+                    disabled=force_random_library_materials,
                 )
-                if params.match_materials_to_script and params.video_source in [
+                if force_random_library_materials:
+                    st.caption(
+                        "当前为随机抽取素材库视频，不会按文案顺序锁定素材。"
+                        "如果需要根据文案自动选择顺序，请切换为“按我选择的素材生成”。"
+                    )
+                elif params.match_materials_to_script and params.video_source in [
                     "local",
                     "local_library",
                 ]:
@@ -3260,7 +4555,26 @@ if render_script_step and start_button:
             if m.url:
                 params.video_materials.append(m)
     elif params.video_source == "local_library":
-        library_materials = st.session_state.get("local_library_video_materials", [])
+        library_usage_mode = st.session_state.get(
+            "local_library_usage_mode",
+            config.app.get("local_library_usage_mode", "random"),
+        )
+        if library_usage_mode not in ["random", "selected"]:
+            library_usage_mode = "random"
+        config.app["local_library_usage_mode"] = library_usage_mode
+        if library_usage_mode == "random":
+            library_materials = material_paths_to_session_materials(
+                [
+                    material_path
+                    for material_path in list_local_material_library()
+                    if os.path.exists(material_path)
+                    and get_material_kind(material_path) == "视频"
+                ]
+            )
+            params.video_concat_mode = VideoConcatMode.random
+            params.match_materials_to_script = False
+        else:
+            library_materials = st.session_state.get("local_library_video_materials", [])
         params.video_materials = []
         for material in library_materials:
             m = MaterialInfo()
@@ -3271,7 +4585,10 @@ if render_script_step and start_button:
                 params.video_materials.append(m)
 
         if not params.video_materials:
-            st.error("请先在本地素材库中添加并选择素材")
+            if library_usage_mode == "random":
+                st.error("本地素材库中还没有可随机抽取的视频素材，请先添加视频素材")
+            else:
+                st.error("请先在本地素材库中添加并选择素材")
             scroll_to_bottom()
             st.stop()
 
@@ -3332,3 +4649,4 @@ if render_result_step:
                     open_task_folder(st.session_state["last_task_id"])
 
 config.save_config()
+# Cache bust: 1783047653
